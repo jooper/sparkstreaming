@@ -79,7 +79,7 @@ object KfkJoinTidb {
     val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "p_projectId")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
-    val JsonUtilsCast=sc.broadcast(JsonUtils)
+
 
     var kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
       "EARLIEST", "EARLIEST")
@@ -110,7 +110,7 @@ object KfkJoinTidb {
       //      rdd.foreach(item=> println(item.value().split(",")(1).toString))
 
       rdd.foreach(item => {
-        JsonUtilsCast.value.asInstanceOf[JsonUtils.type].gson(item.value())
+
 
         //        val jsonObject = JsonUtils.gson(item.value())
         //        println(jsonObject.get("database"))
