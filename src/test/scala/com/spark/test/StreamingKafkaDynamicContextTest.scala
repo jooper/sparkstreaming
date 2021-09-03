@@ -1,16 +1,13 @@
 package com.spark.test
 
-import org.apache.spark.core.SparkKafkaContext
+import java.util.Date
+
+import kafka.message.MessageAndMetadata
+import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
+import org.apache.spark.core.SparkKafkaContext
 import org.apache.spark.streaming.Seconds
 import org.apache.streaming.core.StreamingDynamicContext
-import kafka.serializer.StringDecoder
-import kafka.message.MessageAndMetadata
-import org.apache.spark.streaming.kafka.KafkaDataRDD
-import org.slf4j.LoggerFactory
-import org.apache.log4j.BasicConfigurator
-import org.apache.log4j.PropertyConfigurator
-import java.util.Date
 
 object StreamingKafkaDynamicContextTest {
   PropertyConfigurator.configure("conf/log4j.properties");

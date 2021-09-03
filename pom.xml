@@ -73,6 +73,27 @@
             <artifactId>spark-streaming_${scala.compat.version}</artifactId>
             <version>${spark.vertion}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.compat.version}</artifactId>
+            <version>${spark.vertion}</version>
+        </dependency>
+
+
+        <!-- https://mvnrepository.com/artifact/io.github.palexdev/gson -->
+        <dependency>
+            <groupId>io.github.palexdev</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.9.0</version>
+        </dependency>
+
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>5.1.38</version>
+        </dependency>
     </dependencies>
 
     <build>

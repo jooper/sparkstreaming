@@ -7,7 +7,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 package object test {
   // val zookeeper = "solr1,solr2,mongodb3"
 
-  val outTopic = "test"
+  val outTopic = "s_booking_sink"
   def producerConfig(brokers: String) = {
     val p = new java.util.Properties()
     p.setProperty("bootstrap.servers", brokers)
