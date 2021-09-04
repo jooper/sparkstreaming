@@ -14,6 +14,8 @@ object JsonUtils {
 //  def handleMessage2CaseClass(jsonStr: String): KafkaMessage = {
 //    val gson = new Gson()
 //    gson.fromJson(jsonStr, classOf[KafkaMessage])
+  //        val gson = new Gson()
+  //        println(gson.toJson(item))
 //  }
 
 

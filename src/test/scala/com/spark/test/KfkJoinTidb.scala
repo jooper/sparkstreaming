@@ -2,11 +2,11 @@ package com.spark.test
 
 import java.util.Arrays
 
+import models.LhMessage
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.StreamingKafkaContext
-import org.apache.spark.func.tool._
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -104,52 +104,43 @@ object KfkJoinTidb {
     broadcast.value.createOrReplaceTempView("project")
 
 
-    ds.foreachRDD { rdd =>
+    ds.transform(rdd => {
       val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-      sqlC.sql("select * from project").show()
-      //      rdd.foreach(item=> println(item.value().split(",")(1).toString))
+      import sqlC.implicits._
+      val df = rdd.map(w => {
+        val jsonObject = JsonUtils.gson(w.value())
+        LhMessage(jsonObject.get("database").toString, jsonObject.get("table").toString, jsonObject.get("type").toString)
 
-      rdd.foreach(item => {
+      }).toDF()
 
-
-        //        val jsonObject = JsonUtils.gson(item.value())
-        //        println(jsonObject.get("database"))
-        //        println(jsonObject.get("table"))
-        //        println(jsonObject.get("type"))
-        //        println(jsonObject.get("data"))
-      })
-    }
-
-
-
-
+      df.rdd
+      //
+      //
+      //      df.createOrReplaceTempView("booking")
+      //      val sql = "select * from booking bk left join project pr on 1=1"
+      //      val result: DataFrame = sqlC.sql(sql)
+      //      result.rdd
+    }).print()
 
 
-
-    //   ds.foreachRDD { rdd =>
-    //     rdd.map(w => {
-    //       val m: Array[String] = w.value().split(",")
-    //       (m(0), m(1), m(9))
-    //     })
-    //     CommitOffset(ssc, ds, rdd)
-    //   }
-
-
-    //        ds.transform(rdd => {
-    //          val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-    //          import sqlC.implicits._
-    //          val logDataFrame = rdd.map(w => {
-    //            val m: Array[String] = w.value().split(",")
-    //            (m(0), m(1), m(9))
-    //          }).toDF()
-    //          // 注册为tempTable
-    //    //      logDataFrame.createOrReplaceTempView("TT_CUSTOMER")
-    //    //      val sql = "select R.RSSC_ID,R.RSSC_NAME,COUNT(1) FROM TT_CUSTOMER  T join  TM_SST S on T.ENTITY_CODE = S.ENTITYCODE join TM_RSSC R ON S.RSSC_ID = R.RSSC_ID  GROUP BY R.RSSC_ID,R.RSSC_NAME"
-    //    //      val data1: DataFrame = sqlC.sql(sql)
-    //    //      val a =data1.rdd.map{r =>(r(1).toString,r(2).toString.toInt) }
-    //          rdd.map(println(_))
-    //          rdd
-    //        }).print()
+    //    ds.foreachRDD { rdd =>
+    //      val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+    //      //      sqlC.sql("select * from project").show()
+    //
+    //
+    //      rdd.foreach(item => {
+    //        val jsonObject = JsonUtils.gson(item.value())
+    //        LhMessage(jsonObject.get("database").toString, jsonObject.get("table").toString, jsonObject.get("type").toString)
+    //
+    //
+    //        println(LhMessage)
+    //
+    //        //        jsonObject.get("data").getAsJsonArray.map(item => {
+    //        //          println(item.getAsJsonObject.get("BookingGUID").toString)
+    //        //        })
+    //
+    //      })
+    //    }
 
 
     ssc.start()
