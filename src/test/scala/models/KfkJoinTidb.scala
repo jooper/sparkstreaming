@@ -18,7 +18,7 @@ import org.apache.spark.utils.{JsonUtils, SparkUtils}
 
 import scala.collection.JavaConversions._
 
-object KfkJoinTidb {
+object KfkJoinTidbbg {
   val brokers = KafkaProperties.BROKER_LIST
   PropertyConfigurator.configure("conf/log4j.properties")
 
@@ -119,21 +119,24 @@ object KfkJoinTidb {
             dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString
             , dt.get("CreatedTime").toString)
         })
-        s_bookings.toList
+
+        //        s_bookings.toStream.toDF().createOrReplaceTempView("booking")
+        //        sqlC.sql("select * from booking").show()
+
+        s_bookings
       })
       df
     })
 
 
-    s_bookingsDs.transform(rdd => {
+    s_bookingsDs.foreachRDD(rdd => {
       val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
       import sqlC.implicits._
-      rdd.toDF().createOrReplaceTempView("booking")
-      sqlC.sql("select * from booking").toDF().rdd
+      rdd.map(x => x.asInstanceOf[List[S_booking]]).toDF().show()
     })
 
 
-//    s_bookingsDs.print()
+    s_bookingsDs.print()
 
 
     ssc.start()

@@ -34,7 +34,9 @@ object SparkUtils {
         new SparkConf()
           .setMaster(master)
           .setAppName(appName)
-          .set(SparkKafkaContext.MAX_RATE_PER_PARTITION, "1"))
+          .set(SparkKafkaContext.MAX_RATE_PER_PARTITION, "1")
+          .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+          .set("mergeSchema", "true"))
     }
     sparkInstance
   }
