@@ -119,18 +119,23 @@ object KfkJoinTidb {
             dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString
             , dt.get("CreatedTime").toString)
         })
-        s_bookings.toList
+        s_bookings.toSeq
       })
       df
     })
+
+
+
 
 
     s_bookingsDs.transform(rdd => {
       val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
       import sqlC.implicits._
       rdd.toDF().createOrReplaceTempView("booking")
-      sqlC.sql("select * from booking").toDF().rdd
-    })
+      sqlC.sql("select value.database,value.table from booking").rdd
+    }).print()
+
+
 
 
 //    s_bookingsDs.print()
