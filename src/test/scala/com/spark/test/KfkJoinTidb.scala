@@ -14,7 +14,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
-import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges, OffsetRange}
 import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
@@ -151,7 +151,7 @@ object KfkJoinTidb {
       val resultDf: DataFrame = sqlC.sql(joinSql).toDF()
 
 
-//      val ds = resultDf.as[ConsumerRecord[String, String]]
+
 
 
       //      ds.foreachRDD { rdd =>
@@ -163,9 +163,13 @@ object KfkJoinTidb {
 
 
       resultDf.show()
-//      commitOffsets(ssc, ds, rdd)
+
     }
 
+
+    ds.foreachRDD(rdd => {
+      CommitOffset(ssc, ds, rdd)
+    })
 
     ssc.start()
     ssc.awaitTermination()
@@ -174,11 +178,4 @@ object KfkJoinTidb {
   //end run
 
 
-  private def commitOffsets(ssc: StreamingKafkaContext, ds: InputDStream[ConsumerRecord[String, String]], rdd: RDD[String]) = {
-    //使用自带的offset管理
-    val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
-    ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
-    //使用zookeeper来管理offset
-    ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
-  }
 }
