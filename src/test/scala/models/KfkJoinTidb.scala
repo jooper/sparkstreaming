@@ -10,11 +10,12 @@ import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
-import org.apache.spark.utils.{JsonUtils, SparkUtils}
+import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
 
@@ -83,7 +84,7 @@ object KfkJoinTidbbg {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "p_projectId")
+    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
@@ -103,40 +104,137 @@ object KfkJoinTidbbg {
     broadcast.value.createOrReplaceTempView("project")
 
 
-    var s_bookingsDs = ds.transform(rdd => {
-
-      val df = rdd.map(w => {
-        val jsonObject = JsonUtils.gson(w.value())
-        val dt = jsonObject.get("data").getAsJsonArray.iterator()
-
-
-        val s_bookings = dt.map(item => {
-          val dt = item.getAsJsonObject
-
-          S_booking(jsonObject.get("database").toString, jsonObject.get("table").toString, jsonObject.get("type").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString
-            , dt.get("CreatedTime").toString)
-        })
-
-        //        s_bookings.toStream.toDF().createOrReplaceTempView("booking")
-        //        sqlC.sql("select * from booking").show()
-
-        s_bookings
-      })
-      df
-    })
-
-
-    s_bookingsDs.foreachRDD(rdd => {
+    val elementDstream = ds.map(v => v.value).foreachRDD { rdd =>
       val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+
+      sqlC.sql("select * from project").printSchema()
+
+      val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
+
+      df.printSchema()
+      df.createOrReplaceTempView("booking")
+
+
+      //      df.select(expr("explode(data.BgnDate)"), col("BookingGUID")).show()
+      //      df.selectExpr(explode("data.BgnDate"), col("BookingGUID")).show()
+
+
+      var sqlStr =
+        """
+          |SELECT
+          |bk.data.BookingGUID,
+          |bk.data.projGuid  companyid,
+          |pr.p_projectId projectid
+          |FROM booking bk
+          |join p_project pr on cast(bk.data.projGuid as String)=pr.p_projectId
+          |""".stripMargin
+
+      sqlStr = "select explode(data.BgnDate) as BgnDate  from booking bk"
+
+      sqlC.sql(sqlStr).show()
+      //      sqlC.sql("select database,table,type,data.BgnDate projGuid,data.BookingGUID from booking").show()
+      //      df.select("database").show()
       import sqlC.implicits._
-      rdd.map(x => x.asInstanceOf[List[S_booking]]).toDF().show()
-    })
 
 
-    s_bookingsDs.print()
+      //      df.select(df.col("data").alias("x").toString()).show()
+
+
+      //      val jsonSchema: String = df.select(schema_of_json(col("database"))).as[String].first
+
+
+      //      df.select(schema_of_json(df.toString).alias("schema"))
+      //        .select(regexp_extract($"schema","struct<(.*?)>",1) as "schema").show(false)
+
+
+      //      df.select($"database",from_json(col("data"), jsonSchema, Map[String, String]())).toDF().show()
+
+      //      df.select(to_json(struct($"data"))).toDF("devices").show()
+      //      df.selectExpr("CAST(data AS STRING)").show()
+      //            df.select(explode($"data")).show()
+      //            PeopleDf.toDF().select($"database",$"table",$"type",get_json_object($"data","$.BgnDate").alias("BgnDate")).show()
+
+      //      PeopleDf.filter(PeopleDf.col("data")).show()
+      //      PeopleDf.select("data.BookingGUID").show()
+
+
+      //      val dfDetails = PeopleDf.select(PeopleDf("database"),explode(PeopleDf("data.BookingGUID"))).toDF("database","addressInfo").show()
+
+      //      PeopleDf.select(explode($"data")).toDF("data").show()
+
+      //      PeopleDf.toDF().select(from_json($"device", jsonSchema) as"devices")
+      //      val PeopleDfFilter = PeopleDf.filter(($"value1".rlike("1")) || ($"value2" === 2))
+      //      PeopleDfFilter.show()
+    }
+
+
+    //
+    //    var s_bookingsDs = ds.transform(rdd => {
+    //
+    //      val df = rdd.map(w => {
+    //        val jsonObject = JsonUtils.gson(w.value())
+    //        val dt = jsonObject.get("data").getAsJsonArray.iterator()
+    //
+    //
+    //        val s_bookings = dt.map(item => {
+    //          val dt = item.getAsJsonObject
+    //
+    //          S_booking(jsonObject.get("database").toString, jsonObject.get("table").toString, jsonObject.get("type").toString,
+    //            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
+    //            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
+    //            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString
+    //            , dt.get("CreatedTime").toString)
+    //        })
+    //        s_bookings.toSeq
+    //      })
+    //      df
+    //    })
+    //
+    //
+    //
+    //
+    //
+    //    s_bookingsDs.transform(rdd => {
+    //      val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+    //      import sqlC.implicits._
+    //      rdd.toDF().createOrReplaceTempView("booking")
+    //      sqlC.sql("select value.database,value.table from booking").rdd
+    //    }).print()
+
+
+    //    s_bookingsDs.print()
+
+    //
+    //      val df1 = df.cache()
+    //
+    //
+    //      df1.select(
+    //        expr("explode(data.BgnDate)") as "BgnDate",
+    //        col("database"),
+    //        col("table"),
+    //        col("type"),
+    //        col("data")
+    //      ).select(
+    //        col("database"),
+    //        col("table"),
+    //        col("type"),
+    //        col("data"),
+    //        col("BgnDate"),
+    //        expr("explode(data.BookingGUID)") as "BookingGUID")
+    //      //        .show()
+    //
+    //
+    //      sqlStr =
+    //        """
+    //          |SELECT
+    //          |explode(bk.data.BookingGUID) BookingGUID,
+    //          |explode(bk.data.projGuid)  projGuid,
+    //          |pr.p_projectId projectid
+    //          |FROM booking bk
+    //          |left join p_project pr on explode(bk.data.projGuid)=pr.p_projectId
+    //          |""".stripMargin
+    //
+
 
 
     ssc.start()

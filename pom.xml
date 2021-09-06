@@ -19,8 +19,10 @@
         <maven.compiler.source>1.6</maven.compiler.source>
         <maven.compiler.target>1.6</maven.compiler.target>
         <encoding>UTF-8</encoding>
-        <scala.version>2.11.5</scala.version>
-        <spark.vertion>2.0.1</spark.vertion>
+        <scala.version>2.11.8</scala.version>
+<!--        <scala.version>2.11.5</scala.version>-->
+<!--        <spark.vertion>2.0.1</spark.vertion>-->
+        <spark.vertion>2.2.0</spark.vertion>
         <kafka.version>0.10.0.1</kafka.version>
         <scala.compat.version>2.11</scala.compat.version>
     </properties>

@@ -2,6 +2,7 @@ package models
 
 import java.util.Arrays
 
+
 import com.spark.test.KafkaProperties
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
@@ -10,11 +11,12 @@ import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
-import org.apache.spark.utils.{JsonUtils, SparkUtils}
+import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
 
@@ -83,7 +85,7 @@ object KfkJoinTidb {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "p_projectId")
+    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
@@ -103,42 +105,45 @@ object KfkJoinTidb {
     broadcast.value.createOrReplaceTempView("project")
 
 
-    var s_bookingsDs = ds.transform(rdd => {
-
-      val df = rdd.map(w => {
-        val jsonObject = JsonUtils.gson(w.value())
-        val dt = jsonObject.get("data").getAsJsonArray.iterator()
-
-
-        val s_bookings = dt.map(item => {
-          val dt = item.getAsJsonObject
-
-          S_booking(jsonObject.get("database").toString, jsonObject.get("table").toString, jsonObject.get("type").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString,
-            dt.get("BookingGUID").toString, dt.get("BookingGUID").toString, dt.get("BookingGUID").toString
-            , dt.get("CreatedTime").toString)
-        })
-        s_bookings.toSeq
-      })
-      df
-    })
-
-
-
-
-
-    s_bookingsDs.transform(rdd => {
+    val elementDstream = ds.map(v => v.value).foreachRDD { rdd =>
       val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-      import sqlC.implicits._
-      rdd.toDF().createOrReplaceTempView("booking")
-      sqlC.sql("select value.database,value.table from booking").rdd
-    }).print()
+
+      sqlC.sql("select * from project").printSchema()
+
+      val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
+
+      //      df.printSchema()
+      df.createOrReplaceTempView("booking")
 
 
+      var sqlStr =
+        """
+          |select
+          |database,
+          |table,
+          |type,
+          |BookingGUID, BgnDate,ProjGuid,Status,ProjNum,x_IsTPFCustomer,x_TPFCustomerTime,x_IsThirdCustomer,
+          |x_ThirdCustomerTime,CreatedTime
+          |from booking
+          |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
+          |lateral view explode(data.BgnDate) exploded_colors as BgnDate
+          |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
+          |lateral view explode(data.Status) exploded_colors as Status
+          |lateral view explode(data.ProjNum) exploded_colors as ProjNum
+          |lateral view explode(data.x_IsTPFCustomer) exploded_colors as x_IsTPFCustomer
+          |lateral view explode(data.x_TPFCustomerTime) exploded_colors as x_TPFCustomerTime
+          |lateral view explode(data.x_IsThirdCustomer) exploded_colors as x_IsThirdCustomer
+          |lateral view explode(data.x_ThirdCustomerTime) exploded_colors as x_ThirdCustomerTime
+          |lateral view explode(data.CreatedTime) exploded_colors as CreatedTime
+          |""".stripMargin
+
+      sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
-//    s_bookingsDs.print()
+      val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk join project pr on bk.ProjGuid=pr.p_projectId"
+      sqlC.sql(joinSql).show()
+
+    }
 
 
     ssc.start()
