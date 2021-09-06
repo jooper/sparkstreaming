@@ -2,8 +2,7 @@ package models
 
 import java.util.Arrays
 
-
-import com.spark.test.KafkaProperties
+import com.spark.test.{KafkaProperties, outTopic, producerConfig, transformFunc}
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.common.util.KafkaConfig
@@ -19,6 +18,14 @@ import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
 import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.StreamingContext
+import org.apache.log4j.PropertyConfigurator
+import org.apache.spark.core.StreamingKafkaContext
+import org.apache.spark.func.tool._
+import kafka.serializer.StringDecoder
 
 object KfkJoinTidb {
   val brokers = KafkaProperties.BROKER_LIST
@@ -116,7 +123,7 @@ object KfkJoinTidb {
       df.createOrReplaceTempView("booking")
 
 
-      var sqlStr =
+      val sqlStr =
         """
           |select
           |database,
@@ -141,8 +148,22 @@ object KfkJoinTidb {
 
 
       val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk join project pr on bk.ProjGuid=pr.p_projectId"
-      sqlC.sql(joinSql).show()
+      val resultDf: DataFrame = sqlC.sql(joinSql).toDF()
 
+
+//      val ds = resultDf.as[ConsumerRecord[String, String]]
+
+
+      //      ds.foreachRDD { rdd =>
+      //        rdd.foreach(println)
+      //        rdd
+      //          .map(_.value())
+      //          .writeToKafka(producerConfig(brokers), transformFunc(outTopic, _))
+      //      }
+
+
+      resultDf.show()
+//      commitOffsets(ssc, ds, rdd)
     }
 
 
@@ -152,4 +173,12 @@ object KfkJoinTidb {
 
   //end run
 
+
+  private def commitOffsets(ssc: StreamingKafkaContext, ds: InputDStream[ConsumerRecord[String, String]], rdd: RDD[String]) = {
+    //使用自带的offset管理
+    val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+    //使用zookeeper来管理offset
+    ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
+  }
 }
