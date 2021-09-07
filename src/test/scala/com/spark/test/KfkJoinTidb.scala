@@ -15,7 +15,8 @@ import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
 import org.apache.spark.utils.SparkUtils
-
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 import scala.collection.JavaConversions._
 
 object KfkJoinTidb {
@@ -101,6 +102,7 @@ object KfkJoinTidb {
       rdd =>
         val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
         val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
+        import sqlC.implicits._
         df.createOrReplaceTempView("booking")
         val sqlStr =
           """
@@ -108,8 +110,15 @@ object KfkJoinTidb {
             |database,
             |table,
             |type,
-            |BookingGUID, BgnDate,ProjGuid,Status,ProjNum,x_IsTPFCustomer,x_TPFCustomerTime,x_IsThirdCustomer,
-            |x_ThirdCustomerTime,CreatedTime
+            |BookingGUID,
+            |BgnDate,
+            |ProjGuid,
+            |Status,ProjNum,
+            |x_IsTPFCustomer,
+            |x_TPFCustomerTime,
+            |x_IsThirdCustomer,
+            |nvl(x_ThirdCustomerTime,'nnn') as x_ThirdCustomerTime,
+            |CreatedTime
             |from booking
             |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
             |lateral view explode(data.BgnDate) exploded_colors as BgnDate
@@ -138,14 +147,18 @@ object KfkJoinTidb {
 
 
         resultDf.show(10)
+
+
         resultDf
           .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
           .write
           .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
+          .option("ignoreNullFields", "false")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
           .option("topic", KafkaProperties.SINK_TOPIC)
           .save()
+
 
         resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 

@@ -27,6 +27,7 @@ object KfkJoinTidbbg {
     run
   }
 
+
   /**
    * @func 提交offset。
    * @auto jwp
