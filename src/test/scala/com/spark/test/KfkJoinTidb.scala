@@ -100,7 +100,6 @@ object KfkJoinTidb {
     ds.map(v => v.value).foreachRDD {
       rdd =>
         val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-        sqlC.sql("select * from project").printSchema()
         val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
         df.createOrReplaceTempView("booking")
         val sqlStr =
