@@ -2,36 +2,25 @@ package models
 
 import java.util.Arrays
 
-import com.spark.test.{KafkaProperties, outTopic, producerConfig, transformFunc}
+import com.spark.test.KafkaProperties
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
-import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges, OffsetRange}
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
 import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkConf
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.StreamingContext
-import org.apache.log4j.PropertyConfigurator
-import org.apache.spark.core.StreamingKafkaContext
-import org.apache.spark.func.tool._
-import kafka.serializer.StringDecoder
-import org.apache.kafka.clients.producer.ProducerRecord
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.Cast
 
 object KfkJoinTidb {
   val brokers = KafkaProperties.BROKER_LIST
+  System.setProperty("HADOOP_USER_NAME", "root")
   PropertyConfigurator.configure("conf/log4j.properties")
 
   def main(args: Array[String]): Unit = {
@@ -94,6 +83,8 @@ object KfkJoinTidb {
   def run() {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
+        sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
+
 
     //项目维表数据
     val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
@@ -118,19 +109,12 @@ object KfkJoinTidb {
     broadcast.value.createOrReplaceTempView("project")
 
 
-    val elementDstream = ds.map(v => v.value).foreachRDD {
+    ds.map(v => v.value).foreachRDD {
       rdd =>
         val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-        import sqlC.implicits._
-
         sqlC.sql("select * from project").printSchema()
-
         val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
-
-        //      df.printSchema()
         df.createOrReplaceTempView("booking")
-
-
         val sqlStr =
           """
             |select
@@ -155,51 +139,25 @@ object KfkJoinTidb {
         sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
-        val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk join project pr on bk.ProjGuid=pr.p_projectId"
+        val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk left join project pr on bk.ProjGuid=pr.p_projectId"
         val resultDf: DataFrame = sqlC.sql(joinSql)
 
 
-        //      val rsDs: Dataset[ConsumerRecord[String, String]] = resultDf.as[ConsumerRecord[String, String]]
-
-        //      var names =resultDf.rdd.map(row=>row.get(0)).foreach(println);
-
-
+        resultDf.show(10)
         resultDf
-          .selectExpr("CAST(BookingGUID AS STRING) AS key", "to_json(struct(*)) AS value")
+          .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
           .write
           .format("kafka")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
-          .option("topic", "topic1")
+          .option("topic", KafkaProperties.SINK_TOPIC)
           .save()
 
-
-      //        val schema = resultDf.schema
-      //
-      //        val rddd: RDD[Row] = resultDf.queryExecution.toRdd.mapPartitions { rows =>
-      //          val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      //          rows.map(converter(_).asInstanceOf[Row])
-      //        }
-      //
-      //
-      //        rddd.writeToKafka(producerConfig(brokers), transformFunc = transformFunc(outTopic, ""))
-      //
-      //
-      //
-      //        resultDf.toDF().writeStream.format("kafka")
-      //          .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
-      //          .option("topic", "topic1")
-      //          .start()
-
+              resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
     }
 
 
-    //    ds.foreachRDD { rdd =>
-    //      rdd.map(_.value())
-    //        .writeToKafka(producerConfig(brokers), transformFunc(outTopic, _))
-    //    }
-
-
+    //提交offset
     ds.foreachRDD(rdd => {
       CommitOffset(ssc, ds, rdd)
     })
