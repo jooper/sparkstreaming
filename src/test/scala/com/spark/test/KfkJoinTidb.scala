@@ -83,7 +83,7 @@ object KfkJoinTidb {
   def run() {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
-        sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
+    sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
 
 
     //项目维表数据
@@ -92,8 +92,8 @@ object KfkJoinTidb {
     val broadcast = sc.broadcast(dimPro)
 
 
-    var kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
-      "EARLIEST", "EARLIEST")
+    val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
+      KafkaProperties.AUTO_OFFSET_RESET_CONFIG, KafkaProperties.AUTO_OFFSET_RESET_CONFIG)
 
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
 
@@ -139,7 +139,14 @@ object KfkJoinTidb {
         sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
-        val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk left join project pr on bk.ProjGuid=pr.p_projectId"
+        val joinSql =
+          """
+            |select bk.*,pr.p_projectId,pr.projName
+            |from bk
+            |left join project pr
+            |on bk.ProjGuid=pr.p_projectId
+            |where type='INSERT' and table='s_booking'
+            |""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
 
 
@@ -147,12 +154,13 @@ object KfkJoinTidb {
         resultDf
           .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
           .write
+          .mode("append")   //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
           .option("topic", KafkaProperties.SINK_TOPIC)
           .save()
 
-              resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
+        resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
     }
 
