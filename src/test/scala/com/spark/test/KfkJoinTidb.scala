@@ -9,7 +9,7 @@ import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
@@ -26,6 +26,9 @@ import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.func.tool._
 import kafka.serializer.StringDecoder
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.Cast
 
 object KfkJoinTidb {
   val brokers = KafkaProperties.BROKER_LIST
@@ -91,6 +94,7 @@ object KfkJoinTidb {
   def run() {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
+
     //项目维表数据
     val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
       .persist(StorageLevel.MEMORY_ONLY)
@@ -102,6 +106,8 @@ object KfkJoinTidb {
 
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
 
+
+
     //输出最后一次消费的offset
     getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
 
@@ -112,59 +118,86 @@ object KfkJoinTidb {
     broadcast.value.createOrReplaceTempView("project")
 
 
-    val elementDstream = ds.map(v => v.value).foreachRDD { rdd =>
-      val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+    val elementDstream = ds.map(v => v.value).foreachRDD {
+      rdd =>
+        val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+        import sqlC.implicits._
 
-      sqlC.sql("select * from project").printSchema()
+        sqlC.sql("select * from project").printSchema()
 
-      val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
+        val df = sqlC.read.schema(Schemas.sbookingSchema3).json(rdd)
 
-      //      df.printSchema()
-      df.createOrReplaceTempView("booking")
-
-
-      val sqlStr =
-        """
-          |select
-          |database,
-          |table,
-          |type,
-          |BookingGUID, BgnDate,ProjGuid,Status,ProjNum,x_IsTPFCustomer,x_TPFCustomerTime,x_IsThirdCustomer,
-          |x_ThirdCustomerTime,CreatedTime
-          |from booking
-          |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
-          |lateral view explode(data.BgnDate) exploded_colors as BgnDate
-          |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
-          |lateral view explode(data.Status) exploded_colors as Status
-          |lateral view explode(data.ProjNum) exploded_colors as ProjNum
-          |lateral view explode(data.x_IsTPFCustomer) exploded_colors as x_IsTPFCustomer
-          |lateral view explode(data.x_TPFCustomerTime) exploded_colors as x_TPFCustomerTime
-          |lateral view explode(data.x_IsThirdCustomer) exploded_colors as x_IsThirdCustomer
-          |lateral view explode(data.x_ThirdCustomerTime) exploded_colors as x_ThirdCustomerTime
-          |lateral view explode(data.CreatedTime) exploded_colors as CreatedTime
-          |""".stripMargin
-
-      sqlC.sql(sqlStr).createOrReplaceTempView("bk")
+        //      df.printSchema()
+        df.createOrReplaceTempView("booking")
 
 
-      val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk join project pr on bk.ProjGuid=pr.p_projectId"
-      val resultDf: DataFrame = sqlC.sql(joinSql).toDF()
+        val sqlStr =
+          """
+            |select
+            |database,
+            |table,
+            |type,
+            |BookingGUID, BgnDate,ProjGuid,Status,ProjNum,x_IsTPFCustomer,x_TPFCustomerTime,x_IsThirdCustomer,
+            |x_ThirdCustomerTime,CreatedTime
+            |from booking
+            |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
+            |lateral view explode(data.BgnDate) exploded_colors as BgnDate
+            |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
+            |lateral view explode(data.Status) exploded_colors as Status
+            |lateral view explode(data.ProjNum) exploded_colors as ProjNum
+            |lateral view explode(data.x_IsTPFCustomer) exploded_colors as x_IsTPFCustomer
+            |lateral view explode(data.x_TPFCustomerTime) exploded_colors as x_TPFCustomerTime
+            |lateral view explode(data.x_IsThirdCustomer) exploded_colors as x_IsThirdCustomer
+            |lateral view explode(data.x_ThirdCustomerTime) exploded_colors as x_ThirdCustomerTime
+            |lateral view explode(data.CreatedTime) exploded_colors as CreatedTime
+            |""".stripMargin
+
+        sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
+        val joinSql = "select bk.*,pr.p_projectId,pr.projName from bk join project pr on bk.ProjGuid=pr.p_projectId"
+        val resultDf: DataFrame = sqlC.sql(joinSql)
 
 
+        //      val rsDs: Dataset[ConsumerRecord[String, String]] = resultDf.as[ConsumerRecord[String, String]]
 
-      //      ds.foreachRDD { rdd =>
-      //        rdd.foreach(println)
-      //        rdd
-      //          .map(_.value())
-      //          .writeToKafka(producerConfig(brokers), transformFunc(outTopic, _))
-      //      }
+        //      var names =resultDf.rdd.map(row=>row.get(0)).foreach(println);
 
 
-      resultDf.show()
+        resultDf
+          .selectExpr("CAST(BookingGUID AS STRING) AS key", "to_json(struct(*)) AS value")
+          .write
+          .format("kafka")
+          .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
+          .option("topic", "topic1")
+          .save()
+
+
+      //        val schema = resultDf.schema
+      //
+      //        val rddd: RDD[Row] = resultDf.queryExecution.toRdd.mapPartitions { rows =>
+      //          val converter = CatalystTypeConverters.createToScalaConverter(schema)
+      //          rows.map(converter(_).asInstanceOf[Row])
+      //        }
+      //
+      //
+      //        rddd.writeToKafka(producerConfig(brokers), transformFunc = transformFunc(outTopic, ""))
+      //
+      //
+      //
+      //        resultDf.toDF().writeStream.format("kafka")
+      //          .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
+      //          .option("topic", "topic1")
+      //          .start()
+
 
     }
+
+
+    //    ds.foreachRDD { rdd =>
+    //      rdd.map(_.value())
+    //        .writeToKafka(producerConfig(brokers), transformFunc(outTopic, _))
+    //    }
 
 
     ds.foreachRDD(rdd => {
