@@ -117,7 +117,7 @@ object KfkJoinTidb {
             |x_IsTPFCustomer,
             |x_TPFCustomerTime,
             |x_IsThirdCustomer,
-            |nvl(x_ThirdCustomerTime,'nnn') as x_ThirdCustomerTime,
+            |nvl(x_ThirdCustomerTime,'') as x_ThirdCustomerTime,
             |CreatedTime
             |from booking
             |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
