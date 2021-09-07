@@ -85,18 +85,16 @@ object KfkJoinTidb {
 
     sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
 
-
-    //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
-      .persist(StorageLevel.MEMORY_ONLY)
-    val broadcast = sc.broadcast(dimPro)
-
-
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
       KafkaProperties.AUTO_OFFSET_RESET_CONFIG, KafkaProperties.AUTO_OFFSET_RESET_CONFIG)
 
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
 
+
+    //项目维表数据
+    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
+      .persist(StorageLevel.MEMORY_ONLY)
+    val broadcast = sc.broadcast(dimPro)
 
 
     //输出最后一次消费的offset
@@ -106,7 +104,7 @@ object KfkJoinTidb {
     val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KafkaProperties.TOPIC))
 
 
-    broadcast.value.createOrReplaceTempView("project")
+    broadcast.value.persist().createOrReplaceTempView("project")
 
 
     ds.map(v => v.value).foreachRDD {
@@ -154,7 +152,7 @@ object KfkJoinTidb {
         resultDf
           .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
           .write
-          .mode("append")   //append 追加  overwrite覆盖   ignore忽略  error报错
+          .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
           .option("topic", KafkaProperties.SINK_TOPIC)
