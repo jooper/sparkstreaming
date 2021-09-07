@@ -82,12 +82,9 @@ object KfkJoinTidb {
 
   def run() {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
-
     sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
-
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
       KafkaProperties.AUTO_OFFSET_RESET_CONFIG, KafkaProperties.AUTO_OFFSET_RESET_CONFIG)
-
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
 
 
@@ -96,17 +93,10 @@ object KfkJoinTidb {
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
-
     //输出最后一次消费的offset
     getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
-
-
     val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KafkaProperties.TOPIC))
-
-
     broadcast.value.persist().createOrReplaceTempView("project")
-
-
     ds.map(v => v.value).foreachRDD {
       rdd =>
         val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
@@ -161,8 +151,6 @@ object KfkJoinTidb {
         resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
     }
-
-
     //提交offset
     ds.foreachRDD(rdd => {
       CommitOffset(ssc, ds, rdd)
