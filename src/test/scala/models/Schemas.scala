@@ -49,17 +49,23 @@ object Schemas {
     .add("type", StringType)
     .add("data", ArrayType(
       StructType(Nil)
-        .add("BgnDate", StringType)
         .add("BookingGUID", StringType)
-        .add("buguid", StringType)
         .add("ProjGUID", StringType)
-        .add("Status", StringType)
         .add("ProjNum", StringType)
         .add("x_IsTPFCustomer", StringType)
         .add("x_TPFCustomerTime", StringType)
         .add("x_IsThirdCustomer", StringType)
         .add("x_ThirdCustomerTime", StringType)
         .add("CreatedTime", StringType)
+        .add("Status", StringType)
+
+
+//        .add("BgnDate", StringType)
+//        .add("buguid", StringType)
+
+
+
+
 
     )
     )

@@ -90,7 +90,7 @@ object KfkJoinTidb {
 
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
+    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName","BUGUID")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
@@ -111,17 +111,16 @@ object KfkJoinTidb {
             |table,
             |type,
             |BookingGUID,
-            |BgnDate,
-            |ProjGuid,
-            |Status,ProjNum,
-            |x_IsTPFCustomer,
-            |x_TPFCustomerTime,
-            |x_IsThirdCustomer,
+            |nvl(ProjGuid,'') ProjGuid,
+            |nvl(ProjNum,'') ProjNum,
+            |nvl(x_IsTPFCustomer,'') x_IsTPFCustomer,
+            |nvl(x_TPFCustomerTime,'') x_TPFCustomerTime,
+            |nvl(x_IsThirdCustomer,'') x_IsThirdCustomer,
             |nvl(x_ThirdCustomerTime,'') as x_ThirdCustomerTime,
-            |CreatedTime
+            |CreatedTime,
+            |Status
             |from booking
             |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
-            |lateral view explode(data.BgnDate) exploded_colors as BgnDate
             |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
             |lateral view explode(data.Status) exploded_colors as Status
             |lateral view explode(data.ProjNum) exploded_colors as ProjNum
@@ -137,11 +136,23 @@ object KfkJoinTidb {
 
         val joinSql =
           """
-            |select bk.*,pr.p_projectId,pr.projName
+            |select
+            |pr.BUGUID commpanyId,
+            |bk.BookingGUID,
+            |bk.ProjGuid,
+            |bk.ProjNum,
+            |bk.x_IsTPFCustomer,
+            |bk.x_TPFCustomerTime,
+            |bk.x_IsThirdCustomer,
+            |bk.x_ThirdCustomerTime,
+            |bk.CreatedTime,
+            |nvl(bk.Status,'') Status,
+            |nvl(pr.p_projectId,'') p_projectId,
+            |nvl(pr.projName,'') projName
             |from bk
             |left join project pr
             |on bk.ProjGuid=pr.p_projectId
-            |where type='INSERT' and table='s_booking'
+            |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
             |""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
 
