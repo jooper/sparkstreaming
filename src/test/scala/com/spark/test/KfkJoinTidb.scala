@@ -82,6 +82,7 @@ object KfkJoinTidb {
    */
 
   def run() {
+
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
     sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
@@ -94,10 +95,17 @@ object KfkJoinTidb {
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
+    val dimSbook2Cst: DataFrame = RdbmsUtils.getDataFromTable(sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
+      .persist(StorageLevel.MEMORY_ONLY)
+    val dimSbook2CstBst = sc.broadcast(dimSbook2Cst)
+
+//    dimSbook2Cst.show(10)
+
     //输出最后一次消费的offset
     getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
     val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KafkaProperties.TOPIC))
     broadcast.value.persist().createOrReplaceTempView("project")
+    dimSbook2CstBst.value.persist().createOrReplaceTempView("sb2cst")
     ds.map(v => v.value).foreachRDD {
       rdd =>
         val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
@@ -150,10 +158,11 @@ object KfkJoinTidb {
           |bk.CreatedTime,
           |nvl(bk.Status,'') Status,
           |nvl(pr.p_projectId,'') p_projectId,
-          |nvl(pr.projName,'') projName
+          |nvl(pr.projName,'') projName,
+          |nvl(sb.OppCstGUID,'') OppCstGUID
           |from bk
-          |left join project pr
-          |on bk.ProjGuid=pr.p_projectId
+          |left join project pr on bk.ProjGuid=pr.p_projectId
+          |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
           |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
           |)t""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
