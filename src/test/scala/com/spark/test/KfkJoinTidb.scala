@@ -1,5 +1,6 @@
 package models
 
+import java.io.{FileNotFoundException, IOException}
 import java.util.Arrays
 
 import com.spark.test.KafkaProperties
@@ -17,7 +18,9 @@ import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
 import org.apache.spark.utils.SparkUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+
 import scala.collection.JavaConversions._
+
 
 object KfkJoinTidb {
   val brokers = KafkaProperties.BROKER_LIST
@@ -25,7 +28,13 @@ object KfkJoinTidb {
   PropertyConfigurator.configure("conf/log4j.properties")
 
   def main(args: Array[String]): Unit = {
-    run
+    try {
+      run
+    } catch {
+      case ex: IOException => {
+        println("IO Exception%s".format(ex.getMessage))
+      }
+    }
   }
 
   /**
@@ -99,7 +108,7 @@ object KfkJoinTidb {
       .persist(StorageLevel.MEMORY_ONLY)
     val dimSbook2CstBst = sc.broadcast(dimSbook2Cst)
 
-//    dimSbook2Cst.show(10)
+    //    dimSbook2Cst.show(10)
 
     //输出最后一次消费的offset
     getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
@@ -168,12 +177,12 @@ object KfkJoinTidb {
         val resultDf: DataFrame = sqlC.sql(joinSql)
 
 
-        resultDf.show(false)
+        resultDf.show(5, false)
 
-        //          .selectExpr("'s_booking' AS key", "regexp_replace(to_json(struct(*)),'\\\\\', ' ') AS value")
+
         resultDf
-          .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
-          //          .show(false)
+
+          .selectExpr("'s_booking' AS key", "regexp_replace(to_json(struct(*)),'\\\\\\\\\\|\\\\\\\\n|\\\\\\\\\\t|\\\\\\\\\\r', '') AS value")
           .write
           .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
