@@ -111,8 +111,8 @@ object KfkJoinTidb {
             |table,
             |type,
             |BookingGUID,
-            |nvl(ProjGuid,'') ProjGuid,
-            |nvl(ProjNum,'') ProjNum,
+            |ProjGuid,
+            |ProjNum,
             |nvl(x_IsTPFCustomer,'') x_IsTPFCustomer,
             |nvl(x_TPFCustomerTime,'') x_TPFCustomerTime,
             |nvl(x_IsThirdCustomer,'') x_IsThirdCustomer,
@@ -137,10 +137,10 @@ object KfkJoinTidb {
         val joinSql =
           """
             |select
-            |pr.BUGUID commpanyId,
-            |bk.BookingGUID,
-            |bk.ProjGuid,
-            |bk.ProjNum,
+            |nvl(pr.BUGUID,'') commpanyId,
+            |nvl(bk.BookingGUID,'')BookingGUID,
+            |nvl(bk.ProjGuid,'')ProjGuid,
+            |nvl(bk.ProjNum,'')ProjNum,
             |bk.x_IsTPFCustomer,
             |bk.x_TPFCustomerTime,
             |bk.x_IsThirdCustomer,
