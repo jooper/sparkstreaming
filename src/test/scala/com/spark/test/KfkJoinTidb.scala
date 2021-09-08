@@ -90,7 +90,7 @@ object KfkJoinTidb {
 
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName","BUGUID")
+    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName", "BUGUID")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
@@ -133,35 +133,38 @@ object KfkJoinTidb {
 
         sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
-
+        //        to_json(struct(t.*))
+        //        select 'rc' as subject,to_json(struct(t.*)) as data from (
         val joinSql =
-          """
-            |select
-            |nvl(pr.BUGUID,'') commpanyId,
-            |nvl(bk.BookingGUID,'')BookingGUID,
-            |nvl(bk.ProjGuid,'')ProjGuid,
-            |nvl(bk.ProjNum,'')ProjNum,
-            |bk.x_IsTPFCustomer,
-            |bk.x_TPFCustomerTime,
-            |bk.x_IsThirdCustomer,
-            |bk.x_ThirdCustomerTime,
-            |bk.CreatedTime,
-            |nvl(bk.Status,'') Status,
-            |nvl(pr.p_projectId,'') p_projectId,
-            |nvl(pr.projName,'') projName
-            |from bk
-            |left join project pr
-            |on bk.ProjGuid=pr.p_projectId
-            |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
-            |""".stripMargin
+        """
+          |select 'rc' as subject,'认筹' as msg ,to_json(struct(t.*)) as data from (
+          |select
+          |nvl(pr.BUGUID,'') commpanyId,
+          |nvl(bk.BookingGUID,'')BookingGUID,
+          |nvl(bk.ProjGuid,'')ProjGuid,
+          |nvl(bk.ProjNum,'')ProjNum,
+          |bk.x_IsTPFCustomer,
+          |bk.x_TPFCustomerTime,
+          |bk.x_IsThirdCustomer,
+          |bk.x_ThirdCustomerTime,
+          |bk.CreatedTime,
+          |nvl(bk.Status,'') Status,
+          |nvl(pr.p_projectId,'') p_projectId,
+          |nvl(pr.projName,'') projName
+          |from bk
+          |left join project pr
+          |on bk.ProjGuid=pr.p_projectId
+          |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
+          |)t""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
 
 
-        resultDf.show(10)
+        resultDf.show(false)
 
-
+        //          .selectExpr("'s_booking' AS key", "regexp_replace(to_json(struct(*)),'\\\\\', ' ') AS value")
         resultDf
           .selectExpr("'s_booking' AS key", "to_json(struct(*)) AS value")
+          //          .show(false)
           .write
           .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
