@@ -38,6 +38,9 @@ object SparkUtils {
           .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
           .set("mergeSchema", "true")
           .set("spark.driver.host", "localhost")
+          .set("spark.streaming.backpressure.initialRate", "30") //初始速率500条/s
+          .set("spark.streaming.backpressure.enabled", "true") //开启压背
+          .set("spark.streaming.kafka.maxRatePerPartition", "5000") //最大速度不超过5000条
       )
     }
     sparkInstance
