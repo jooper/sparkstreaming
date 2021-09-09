@@ -49,6 +49,7 @@ object StreamingKafkaDynamicContextTest {
         rdd.updateOffsets()
         println("################ END ##################")
 
+
         count > 5 //是否马上执行下个批次。否则就等到下一批次时间到来 。 （这里设为，如果kafka还有数据就立即执行下一批次，否则等待10s）
     }
     sskc.start()

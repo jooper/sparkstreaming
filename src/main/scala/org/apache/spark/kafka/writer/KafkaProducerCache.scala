@@ -3,7 +3,8 @@ package org.apache.spark.kafka.writer
 import java.util.Properties
 import org.apache.kafka.clients.producer.KafkaProducer
 import scala.collection.mutable
-private[spark] object KafkaProducerCache {
+//private[spark] object KafkaProducerCache {
+ object KafkaProducerCache {
   private lazy val producers =
     mutable.HashMap.empty[Properties, KafkaProducer[_, _]]
 

@@ -3,18 +3,19 @@ package models
 import java.io.{FileNotFoundException, IOException}
 import java.util.Arrays
 
-import com.spark.test.KafkaProperties
+import com.spark.test.{KafkaProperties, outTopic, producerConfig, transformFunc}
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.StreamingKafkaContext
+import org.apache.spark.kafka.writer.KafkaProducerCache
 import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
-import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges, OffsetRange}
 import org.apache.spark.utils.SparkUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -48,8 +49,7 @@ object KfkJoinTidb {
     ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
     //使用zookeeper来管理offset
     ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
-
-    println(rdd.partitions.foreach("partition:%s".format(_)))
+//    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
   }
 
@@ -118,7 +118,10 @@ object KfkJoinTidb {
 
     //输出最后一次消费的offset
     getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
+
+
     val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KafkaProperties.TOPIC))
+
     broadcast.value.persist().createOrReplaceTempView("project")
     dimSbook2CstBst.value.persist().createOrReplaceTempView("sb2cst")
     ds.map(v => v.value).foreachRDD {
@@ -196,17 +199,23 @@ object KfkJoinTidb {
           .format("kafka")
           .option("ignoreNullFields", "false")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
+          .option("kafka.partitioner.class","org.apache.spark.kafka.partitioners.TuozPartitioner")
           .option("topic", KafkaProperties.SINK_TOPIC)
           .save()
-
 
         resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
     }
+//    val producer = KafkaProducerCache.getProducer(null)
+
+
+
     //提交offset
     ds.foreachRDD(rdd => {
       CommitOffset(ssc, ds, rdd)
     })
+
+
 
     ssc.start()
     ssc.awaitTermination()
