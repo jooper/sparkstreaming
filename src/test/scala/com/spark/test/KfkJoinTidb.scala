@@ -150,39 +150,41 @@ object KfkJoinTidb {
 
         sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
-        //        to_json(struct(t.*))
-        //        select 'rc' as subject,to_json(struct(t.*)) as data from (
+
         val joinSql =
-        """
-          |select 'rc' as subject,'认筹' as msg ,to_json(struct(t.*)) as data from (
-          |select
-          |nvl(pr.BUGUID,'') commpanyId,
-          |nvl(bk.BookingGUID,'')BookingGUID,
-          |nvl(bk.ProjGuid,'')ProjGuid,
-          |nvl(bk.ProjNum,'')ProjNum,
-          |bk.x_IsTPFCustomer,
-          |bk.x_TPFCustomerTime,
-          |bk.x_IsThirdCustomer,
-          |bk.x_ThirdCustomerTime,
-          |bk.CreatedTime,
-          |nvl(bk.Status,'') Status,
-          |nvl(pr.p_projectId,'') p_projectId,
-          |nvl(pr.projName,'') projName,
-          |nvl(sb.OppCstGUID,'') OppCstGUID
-          |from bk
-          |left join project pr on bk.ProjGuid=pr.p_projectId
-          |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
-          |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
-          |)t""".stripMargin
+          """
+            |select
+            |'booking' as subject,
+            |'认筹' as msg ,
+            |struct(t.*) as data
+            |from (
+            |select
+            |nvl(pr.BUGUID,'') commpanyId,
+            |nvl(bk.BookingGUID,'')BookingGUID,
+            |nvl(bk.ProjGuid,'')ProjGuid,
+            |nvl(bk.ProjNum,'')ProjNum,
+            |bk.x_IsTPFCustomer,
+            |bk.x_TPFCustomerTime,
+            |bk.x_IsThirdCustomer,
+            |bk.x_ThirdCustomerTime,
+            |bk.CreatedTime,
+            |nvl(bk.Status,'') Status,
+            |nvl(pr.p_projectId,'') p_projectId,
+            |nvl(pr.projName,'') projName,
+            |nvl(sb.OppCstGUID,'') OppCstGUID
+            |from bk
+            |left join project pr on bk.ProjGuid=pr.p_projectId
+            |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
+            |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
+            |)t""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
+        //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
 
-
-        resultDf.show(5, false)
-
+        resultDf.selectExpr("'booking' AS key", "to_json(struct(*)) AS value")
+          .show(1, false)
 
         resultDf
-
-          .selectExpr("'s_booking' AS key", "regexp_replace(to_json(struct(*)),'\\\\\\\\\\|\\\\\\\\n|\\\\\\\\\\t|\\\\\\\\\\r', '') AS value")
+          .selectExpr("'booking' AS key", "to_json(struct(*)) AS value")
           .write
           .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
@@ -196,9 +198,9 @@ object KfkJoinTidb {
 
     }
     //提交offset
-    ds.foreachRDD(rdd => {
-      CommitOffset(ssc, ds, rdd)
-    })
+    //    ds.foreachRDD(rdd => {
+    //      CommitOffset(ssc, ds, rdd)
+    //    })
 
     ssc.start()
     ssc.awaitTermination()

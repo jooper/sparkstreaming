@@ -237,6 +237,30 @@ object KfkJoinTidbbg {
     //
 
 
+    val joinSql =
+      """
+        |select to_json(struct(tt.*)) as value from
+        |(select 'booking' as subject,'认筹' as msg ,cast(struct(t.*) as String) as data from (
+        |select
+        |nvl(pr.BUGUID,'') commpanyId,
+        |nvl(bk.BookingGUID,'')BookingGUID,
+        |nvl(bk.ProjGuid,'')ProjGuid,
+        |nvl(bk.ProjNum,'')ProjNum,
+        |bk.x_IsTPFCustomer,
+        |bk.x_TPFCustomerTime,
+        |bk.x_IsThirdCustomer,
+        |bk.x_ThirdCustomerTime,
+        |bk.CreatedTime,
+        |nvl(bk.Status,'') Status,
+        |nvl(pr.p_projectId,'') p_projectId,
+        |nvl(pr.projName,'') projName,
+        |nvl(sb.OppCstGUID,'') OppCstGUID
+        |from bk
+        |left join project pr on bk.ProjGuid=pr.p_projectId
+        |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
+        |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
+        |)t)tt""".stripMargin
+
 
     ssc.start()
     ssc.awaitTermination()
