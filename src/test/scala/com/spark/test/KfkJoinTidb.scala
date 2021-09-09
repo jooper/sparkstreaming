@@ -49,6 +49,7 @@ object KfkJoinTidb {
     //使用zookeeper来管理offset
     ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
 
+    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
   }
 
@@ -94,6 +95,11 @@ object KfkJoinTidb {
 
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
     sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
+    sc.getConf.set("per.partition.offsetrange.step", "1000")
+    sc.getConf.set("per.partition.offsetrange.threshold", "1000")
+    sc.getConf.set("enable.auto.repartion", "false")
+
+
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
       KafkaProperties.AUTO_OFFSET_RESET_CONFIG, KafkaProperties.AUTO_OFFSET_RESET_CONFIG)
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
@@ -198,9 +204,9 @@ object KfkJoinTidb {
 
     }
     //提交offset
-    //    ds.foreachRDD(rdd => {
-    //      CommitOffset(ssc, ds, rdd)
-    //    })
+    ds.foreachRDD(rdd => {
+      CommitOffset(ssc, ds, rdd)
+    })
 
     ssc.start()
     ssc.awaitTermination()
