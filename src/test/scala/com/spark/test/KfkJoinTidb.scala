@@ -100,11 +100,11 @@ object KfkJoinTidb {
 
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName", "BUGUID")
+    val dimPro: DataFrame = RdbmsUtils.mysql.getDataFromTable(sc, "p_project", "p_projectId", "projName", "BUGUID")
     //      .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
-    val dimSbook2Cst: DataFrame = RdbmsUtils.getDataFromTable(sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
+    val dimSbook2Cst: DataFrame = RdbmsUtils.mysql.getDataFromTable(sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
     //      .persist(StorageLevel.MEMORY_ONLY)
     val dimSbook2CstBst = sc.broadcast(dimSbook2Cst)
 

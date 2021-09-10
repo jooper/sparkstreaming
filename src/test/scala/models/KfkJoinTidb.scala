@@ -84,7 +84,7 @@ object KfkJoinTidbbg {
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
 
     //项目维表数据
-    val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName")
+    val dimPro: DataFrame = RdbmsUtils.mysql.getDataFromTable(sc, "p_project", "p_projectId", "projName")
       .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 

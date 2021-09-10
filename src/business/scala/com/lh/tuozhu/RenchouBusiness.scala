@@ -35,11 +35,11 @@ object RenchouBusiness {
 
 
       //项目维表数据
-      val dimPro: DataFrame = RdbmsUtils.getDataFromTable(ssc.sc, "p_project", "p_projectId", "projName", "BUGUID")
+      val dimPro: DataFrame = RdbmsUtils.mysql.getDataFromTable(ssc.sc, "p_project", "p_projectId", "projName", "BUGUID")
       val broadcast = ssc.sc.broadcast(dimPro)
 
       //机会用户维表数据
-      val dimSbook2Cst: DataFrame = RdbmsUtils.getDataFromTable(ssc.sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
+      val dimSbook2Cst: DataFrame = RdbmsUtils.mysql.getDataFromTable(ssc.sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
       val dimSbook2CstBst = ssc.sc.broadcast(dimSbook2Cst)
 
 
