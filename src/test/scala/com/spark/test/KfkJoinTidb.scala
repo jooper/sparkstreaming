@@ -163,13 +163,8 @@ object KfkJoinTidb {
         sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
-        val joinSql =
+        val businesSql =
           """
-            |select
-            |'booking' as subject,
-            |'认筹' as msg ,
-            |struct(t.*) as data
-            |from (
             |select
             |nvl(pr.BUGUID,'') commpanyId,
             |nvl(bk.BookingGUID,'')bookingGuid,
@@ -182,13 +177,31 @@ object KfkJoinTidb {
             |bk.x_ThirdCustomerTime level30Time,
             |bk.CreatedTime createdTime,
             |nvl(bk.Status,'') status,
-            |nvl(pr.p_projectId,'') p_projectId,
+            |nvl(pr.p_projectId,'') stagingId,
             |nvl(pr.projName,'') projName,
-            |nvl(sb.OppCstGUID,'') OppCstGUID
+            |nvl(sb.OppCstGUID,'') customerId
             |from bk
             |left join project pr on bk.ProjGuid=pr.p_projectId
             |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
             |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
+            |""".stripMargin
+
+        val businessDf: DataFrame = sqlC.sql(businesSql)
+
+
+        businessDf.groupBy("commpanyId", "bookingGuid", "projectGuid", "ProjNum"
+          , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
+          .agg(collect_set("customerId").as("customerId"))
+          .createOrReplaceTempView("business")
+
+        val joinSql =
+          """
+            |select
+            |'booking' as subject,
+            |'认筹' as msg ,
+            |struct(t.*) as data
+            |from (
+            |select * from business
             |)t""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
         //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
@@ -197,7 +210,7 @@ object KfkJoinTidb {
         resultDf
           .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
           .show(1, false)
-        //        println("message count:" + resultDf.count())
+        println("message count:" + resultDf.count())
 
 
         resultDf
