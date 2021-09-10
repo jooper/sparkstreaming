@@ -68,7 +68,7 @@ object SparkUtils {
                        consumerFrom: String, errorFrom: String, windowSizeSecend: Long) = {
     if (sccInstance == null) {
       val sc = SparkUtils.getScInstall(master, appName)
-      sc.setCheckpointDir("%S/sparkCheckPoint/%s".format(KfkProperties.HDFS, checkpoinDir))
+      sc.setCheckpointDir("%s/sparkCheckPoint/%s".format(KfkProperties.HDFS, checkpoinDir))
       val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
       sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
     }
