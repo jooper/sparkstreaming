@@ -4,28 +4,14 @@ import java.util.Arrays
 
 import com.spark.test.KafkaProperties
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
+import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.{SparkKafkaContext, StreamingKafkaContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.streaming.dstream.InputDStream
-import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
-import org.apache.spark.{SparkConf, SparkContext}
-import java.io.IOException
-import java.util.Arrays
-
-import com.lh.utils.{RdbmsUtils, SparkUtils}
-import com.spark.test.KafkaProperties
-import models.Schemas
-import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
-import org.apache.log4j.PropertyConfigurator
-import org.apache.spark.common.util.KafkaConfig
-import org.apache.spark.core.StreamingKafkaContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions._
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
+import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.JavaConversions._
 
@@ -82,7 +68,7 @@ object SparkUtils {
                        consumerFrom: String, errorFrom: String, windowSizeSecend: Long) = {
     if (sccInstance == null) {
       val sc = SparkUtils.getScInstall(master, appName)
-      sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint/%s".format(checkpoinDir))
+      sc.setCheckpointDir("%S/sparkCheckPoint/%s".format(KfkProperties.HDFS, checkpoinDir))
       val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
       sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
     }

@@ -1,6 +1,6 @@
 package com.lh.tuozhu
 
-import com.lh.utils.{RdbmsUtils, Schemas, SparkUtils, kfkProperties}
+import com.lh.utils.{RdbmsUtils, Schemas, SparkUtils, KfkProperties}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.core.StreamingKafkaContext
@@ -30,7 +30,7 @@ object RenchouBusiness {
     try {
 
       val ssc: StreamingKafkaContext = SparkUtils.getKfkSccInstall("local[4]", "renchou",
-        kfkProperties.BROKER_LIST, kfkProperties.GROUP_ID, "renchou", "LAST",
+        KfkProperties.BROKER_LIST, KfkProperties.GROUP_ID, "renchou", "LAST",
         "consum", 10)
 
 
@@ -47,7 +47,7 @@ object RenchouBusiness {
       //      SparkUtils.getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
 
 
-      val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(kfkProperties.TOPIC))
+      val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KfkProperties.TOPIC))
 
 
       ds.mapPartitions(v => v.map(vv => vv.value())).foreachRDD {
@@ -149,8 +149,8 @@ object RenchouBusiness {
             .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
             .format("kafka")
             .option("ignoreNullFields", "false")
-            .option("kafka.bootstrap.servers", kfkProperties.BROKER_LIST)
-            .option("topic", kfkProperties.SINK_TOPIC)
+            .option("kafka.bootstrap.servers", KfkProperties.BROKER_LIST)
+            .option("topic", KfkProperties.SINK_TOPIC)
             .save()
 
           resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
