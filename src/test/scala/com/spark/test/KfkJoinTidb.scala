@@ -95,12 +95,6 @@ object KfkJoinTidb {
 
     val sc = SparkUtils.getScInstall("local[*]", "s_booking")
     sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint")
-    sc.getConf.set("per.partition.offsetrange.step", "1000")
-    sc.getConf.set("per.partition.offsetrange.threshold", "1000")
-    sc.getConf.set("enable.auto.repartion", "false")
-    //    sc.getConf.set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    //    sc.getConf.set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
       KafkaProperties.AUTO_OFFSET_RESET_CONFIG, "consum")
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
@@ -167,6 +161,8 @@ object KfkJoinTidb {
         val businesSql =
           """
             |select
+            |type,
+            |es,
             |nvl(pr.BUGUID,'') commpanyId,
             |nvl(bk.BookingGUID,'')bookingGuid,
             |nvl(bk.ProjGuid,'')projectGuid,
@@ -190,27 +186,34 @@ object KfkJoinTidb {
         val businessDf: DataFrame = sqlC.sql(businesSql)
 
 
-        businessDf.groupBy("commpanyId", "bookingGuid", "projectGuid", "ProjNum"
+        businessDf.groupBy("es", "type", "commpanyId", "bookingGuid", "projectGuid", "ProjNum"
           , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
           .agg(collect_set("customerId").as("customerId"))
           .createOrReplaceTempView("business")
 
+
         val joinSql =
           """
             |select
-            |'booking' as subject,
-            |'认筹' as msg ,
-            |struct(t.*) as data
+            |'%s' as subject,
+            |'%s' as msg ,
+            |t.es as eventTime,
+            |t.type as actionType,
+            |'' as umsId,
+            |es as umsTime,
+            |type  as umsActive,
+            |struct(t.commpanyId,t.bookingGuid,t.projectGuid,t.ProjNum,t.projectName,t.isLevel25,t.level25Time,
+            |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName) as data
             |from business
-            |t""".stripMargin
+            |t""".format("booking", "认筹").stripMargin
+
         val resultDf: DataFrame = sqlC.sql(joinSql)
         //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
 
 
-        resultDf
-          .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
-          .show(1, false)
-        println("message count:" + resultDf.count())
+        //        resultDf
+        //          .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
+        //          .show(1, false)
 
 
         resultDf

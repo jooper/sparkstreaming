@@ -13,6 +13,6 @@ object KafkaProperties {
 
   val GROUP_ID = "ods_crm2" //消费者使用
 
-  val AUTO_OFFSET_RESET_CONFIG = "LAST" //smallest,largest,earliest,latest   LAST
+  val AUTO_OFFSET_RESET_CONFIG = "LAST" //smallest,largest,earliest,   LAST
 
 }

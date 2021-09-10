@@ -41,6 +41,12 @@ object SparkUtils {
           .set("spark.streaming.backpressure.initialRate", "30") //初始速率500条/s
           .set("spark.streaming.backpressure.enabled", "true") //开启压背
           .set("spark.streaming.kafka.maxRatePerPartition", "5000") //最大速度不超过5000条
+          .set("per.partition.offsetrange.step", "1000")
+          .set("per.partition.offsetrange.threshold", "1000")
+          .set("enable.auto.repartion", "false")
+        //    sc.getConf.set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+        //    sc.getConf.set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+
       )
     }
     sparkInstance
