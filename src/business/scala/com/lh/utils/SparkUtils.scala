@@ -78,13 +78,13 @@ object SparkUtils {
     sparkInstance
   }
 
-  def getKfkSccInstall(master: String, app_name: String, brokers: String, group_id: String, checkpoin_dir: String,
-                       consumer_from: String, error_from: String) = {
+  def getKfkSccInstall(master: String, appName: String, brokers: String, groupId: String, checkpoinDir: String,
+                       consumerFrom: String, errorFrom: String, windowSizeSecend: Long) = {
     if (sccInstance == null) {
-      val sc = SparkUtils.getScInstall(master, app_name)
-      sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint/$s".format(checkpoin_dir))
-      val kp = StreamingKafkaContext.getKafkaParam(brokers, group_id, consumer_from, error_from)
-      sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
+      val sc = SparkUtils.getScInstall(master, appName)
+      sc.setCheckpointDir("hdfs://10.231.145.212:9000/sparkCheckPoint/%s".format(checkpoinDir))
+      val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
+      sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
     }
     sccInstance
   }

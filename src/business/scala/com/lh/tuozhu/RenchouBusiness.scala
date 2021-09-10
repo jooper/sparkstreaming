@@ -30,7 +30,8 @@ object RenchouBusiness {
     try {
 
       val ssc: StreamingKafkaContext = SparkUtils.getKfkSccInstall("local[4]", "renchou",
-        kfkProperties.BROKER_LIST, kfkProperties.GROUP_ID, "renchou", "LAST", "consum")
+        kfkProperties.BROKER_LIST, kfkProperties.GROUP_ID, "renchou", "LAST",
+        "consum", 10)
 
 
       //项目维表数据
