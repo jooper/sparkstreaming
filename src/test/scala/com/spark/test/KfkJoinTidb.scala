@@ -203,7 +203,7 @@ object KfkJoinTidb {
             |es as umsTime,
             |type  as umsActive,
             |struct(t.commpanyId,t.bookingGuid,t.projectGuid,t.ProjNum,t.projectName,t.isLevel25,t.level25Time,
-            |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName) as data
+            |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName,t.customerId) as data
             |from business
             |t""".format("booking", "认筹").stripMargin
 
