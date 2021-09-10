@@ -49,7 +49,7 @@ object KfkJoinTidb {
     ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
     //使用zookeeper来管理offset
     ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
-//    println(rdd.partitions.foreach("partition:%s".format(_)))
+    //    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
   }
 
@@ -98,20 +98,21 @@ object KfkJoinTidb {
     sc.getConf.set("per.partition.offsetrange.step", "1000")
     sc.getConf.set("per.partition.offsetrange.threshold", "1000")
     sc.getConf.set("enable.auto.repartion", "false")
-
+    //    sc.getConf.set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+    //    sc.getConf.set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
 
     val kp = StreamingKafkaContext.getKafkaParam(brokers, KafkaProperties.GROUP_ID,
-      KafkaProperties.AUTO_OFFSET_RESET_CONFIG, KafkaProperties.AUTO_OFFSET_RESET_CONFIG)
+      KafkaProperties.AUTO_OFFSET_RESET_CONFIG, "consum")
     val ssc = new StreamingKafkaContext(kp.toMap, sc, Seconds(10))
 
 
     //项目维表数据
     val dimPro: DataFrame = RdbmsUtils.getDataFromTable(sc, "p_project", "p_projectId", "projName", "BUGUID")
-      .persist(StorageLevel.MEMORY_ONLY)
+    //      .persist(StorageLevel.MEMORY_ONLY)
     val broadcast = sc.broadcast(dimPro)
 
     val dimSbook2Cst: DataFrame = RdbmsUtils.getDataFromTable(sc, "S_BOOKING2CST", "BookingGUID", "OppCstGUID")
-      .persist(StorageLevel.MEMORY_ONLY)
+    //      .persist(StorageLevel.MEMORY_ONLY)
     val dimSbook2CstBst = sc.broadcast(dimSbook2Cst)
 
     //    dimSbook2Cst.show(10)
@@ -139,6 +140,7 @@ object KfkJoinTidb {
             |BookingGUID,
             |ProjGuid,
             |ProjNum,
+            |ProjName,
             |nvl(x_IsTPFCustomer,'') x_IsTPFCustomer,
             |nvl(x_TPFCustomerTime,'') x_TPFCustomerTime,
             |nvl(x_IsThirdCustomer,'') x_IsThirdCustomer,
@@ -147,6 +149,7 @@ object KfkJoinTidb {
             |Status
             |from booking
             |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
+            |lateral view explode(data.ProjName) exploded_names as ProjName
             |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
             |lateral view explode(data.Status) exploded_colors as Status
             |lateral view explode(data.ProjNum) exploded_colors as ProjNum
@@ -169,15 +172,16 @@ object KfkJoinTidb {
             |from (
             |select
             |nvl(pr.BUGUID,'') commpanyId,
-            |nvl(bk.BookingGUID,'')BookingGUID,
-            |nvl(bk.ProjGuid,'')ProjGuid,
+            |nvl(bk.BookingGUID,'')bookingGuid,
+            |nvl(bk.ProjGuid,'')projectGuid,
             |nvl(bk.ProjNum,'')ProjNum,
-            |bk.x_IsTPFCustomer,
-            |bk.x_TPFCustomerTime,
-            |bk.x_IsThirdCustomer,
-            |bk.x_ThirdCustomerTime,
-            |bk.CreatedTime,
-            |nvl(bk.Status,'') Status,
+            |nvl(bk.ProjName,'') projectName,
+            |bk.x_IsTPFCustomer isLevel25,
+            |bk.x_TPFCustomerTime level25Time,
+            |bk.x_IsThirdCustomer isLevel30,
+            |bk.x_ThirdCustomerTime level30Time,
+            |bk.CreatedTime createdTime,
+            |nvl(bk.Status,'') status,
             |nvl(pr.p_projectId,'') p_projectId,
             |nvl(pr.projName,'') projName,
             |nvl(sb.OppCstGUID,'') OppCstGUID
@@ -189,32 +193,32 @@ object KfkJoinTidb {
         val resultDf: DataFrame = sqlC.sql(joinSql)
         //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
 
-        resultDf.selectExpr("'booking' AS key", "to_json(struct(*)) AS value")
-          .show(1, false)
 
         resultDf
-          .selectExpr("'booking' AS key", "to_json(struct(*)) AS value")
+          .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
+          .show(1, false)
+        //        println("message count:" + resultDf.count())
+
+
+        resultDf
+          .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
           .write
           .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
           .format("kafka")
           .option("ignoreNullFields", "false")
           .option("kafka.bootstrap.servers", KafkaProperties.BROKER_LIST)
-          .option("kafka.partitioner.class","org.apache.spark.kafka.partitioners.TuozPartitioner")
           .option("topic", KafkaProperties.SINK_TOPIC)
           .save()
 
         resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
     }
-//    val producer = KafkaProducerCache.getProducer(null)
-
 
 
     //提交offset
     ds.foreachRDD(rdd => {
       CommitOffset(ssc, ds, rdd)
     })
-
 
 
     ssc.start()
