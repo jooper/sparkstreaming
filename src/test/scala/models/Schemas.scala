@@ -47,6 +47,7 @@ object Schemas {
     .add("database", StringType)
     .add("table", StringType)
     .add("type", StringType)
+    .add("es", StringType)
     .add("data", ArrayType(
       StructType(Nil)
         .add("BookingGUID", StringType)

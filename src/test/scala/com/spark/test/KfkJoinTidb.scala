@@ -137,6 +137,7 @@ object KfkJoinTidb {
             |database,
             |table,
             |type,
+            |es,
             |BookingGUID,
             |ProjGuid,
             |ProjNum,
@@ -200,9 +201,8 @@ object KfkJoinTidb {
             |'booking' as subject,
             |'认筹' as msg ,
             |struct(t.*) as data
-            |from (
-            |select * from business
-            |)t""".stripMargin
+            |from business
+            |t""".stripMargin
         val resultDf: DataFrame = sqlC.sql(joinSql)
         //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
 
