@@ -1,7 +1,6 @@
-package org.apache.spark.utils
+package com.lh.utils
 
-import com.google.gson.{Gson, JsonObject, JsonParser}
-
+import com.google.gson.{JsonObject, JsonParser}
 
 object JsonUtils {
   def gson(jsonStr: String):JsonObject ={

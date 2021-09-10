@@ -2,12 +2,12 @@ package models
 
 import java.util.Arrays
 
+import com.lh.utils.{RdbmsUtils, SparkUtils}
 import com.spark.test.KafkaProperties
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.StreamingKafkaContext
-import org.apache.spark.rdbms.RdbmsUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
@@ -15,7 +15,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
-import org.apache.spark.utils.SparkUtils
 
 import scala.collection.JavaConversions._
 

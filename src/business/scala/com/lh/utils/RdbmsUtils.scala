@@ -1,10 +1,8 @@
-package org.apache.spark.rdbms
+package com.lh.utils
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.utils.SparkUtils
-import org.apache.spark.{SparkConf, SparkContext}
 
 object RdbmsUtils {
 
@@ -82,6 +80,3 @@ object RdbmsUtils {
 
 
 }
-
-
-
