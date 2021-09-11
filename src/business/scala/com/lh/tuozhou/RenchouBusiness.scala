@@ -1,4 +1,4 @@
-package com.lh.tuozhu
+package com.lh.tuozhou
 
 import com.lh.utils.{RdbmsUtils, Schemas, SparkUtils, KfkProperties}
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -140,19 +140,11 @@ object RenchouBusiness {
               |from business
               |t""".format("booking", "认筹").stripMargin
 
+          //注意这里不用to_json不能嵌套使用，否则json格式会有反斜线
           val resultDf: DataFrame = sqlC.sql(joinSql)
-          //注意这里不用to_json  嵌套使用，否则json格式会有反斜线
-
-          resultDf
             .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
-            .write
-            .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错
-            .format("kafka")
-            .option("ignoreNullFields", "false")
-            .option("kafka.bootstrap.servers", KfkProperties.BROKER_LIST)
-            .option("topic", KfkProperties.SINK_TOPIC)
-            .save()
 
+          SparkUtils.sinkDfToKfk(resultDf, KfkProperties.SINK_TOPIC)
           resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
       }

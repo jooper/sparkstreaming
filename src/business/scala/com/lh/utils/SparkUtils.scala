@@ -7,7 +7,7 @@ import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.{SparkKafkaContext, StreamingKafkaContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
@@ -122,7 +122,27 @@ object SparkUtils {
     conf.setTopics(topics)
   }
 
+  /**
+   * @fun 保存rdd信息到指定的topic中
+   * @author jwp
+   * @date 2021-09-11
+   **/
+  def sinkDfToKfk(resultDf: DataFrame, topic: String) = {
+    resultDf
+      .write
+      .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错,写到kafka只能是append
+      .format("kafka")
+      .option("ignoreNullFields", "false")
+      .option("kafka.bootstrap.servers", KfkProperties.BROKER_LIST)
+      .option("topic", topic)
+      .save()
+  }
 
+  /**
+   * @fun 设置访问hdfs的用户
+   * @author jwp
+   * @date 2021-09-11
+   */
   def setHdfsUser(uname: String): Unit = {
     System.setProperty("HADOOP_USER_NAME", uname)
   }
