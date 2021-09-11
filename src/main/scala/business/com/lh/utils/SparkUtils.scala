@@ -1,0 +1,149 @@
+package com.lh.utils
+
+import java.util.Arrays
+
+
+import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
+import org.apache.spark.common.util.KafkaConfig
+import org.apache.spark.core.{SparkKafkaContext, StreamingKafkaContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.dstream.InputDStream
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.collection.JavaConversions._
+
+object SparkUtils {
+  @transient private var sparkInstance: SparkContext = _
+  @transient private var sqlInstance: SQLContext = _
+  @transient private var sccInstance: StreamingKafkaContext = _
+
+  def getSQLContextInstance(sparkContext: SparkContext, isSingle: Boolean = true): SQLContext = {
+    if (isSingle) {
+      if (sqlInstance == null) {
+        sqlInstance = new SQLContext(sparkContext)
+      }
+      sqlInstance
+    }
+    else {
+      new SQLContext(sparkContext)
+    }
+  }
+
+  def getSQLContextInstance(): SQLContext = {
+    if (sqlInstance == null) {
+      getScInstall("local[*]", "default")
+      sqlInstance = new SQLContext(sparkInstance)
+    }
+    sqlInstance
+  }
+
+  def getScInstall(master: String, appName: String): SparkContext = {
+    if (sparkInstance == null) {
+      sparkInstance = new SparkContext(
+        new SparkConf()
+          .setMaster(master)
+          .setAppName(appName)
+          .set(SparkKafkaContext.MAX_RATE_PER_PARTITION, "1")
+          .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+          .set("mergeSchema", "true")
+          .set("spark.driver.host", "localhost")
+          .set("spark.streaming.backpressure.initialRate", "30") //初始速率500条/s
+          .set("spark.streaming.backpressure.enabled", "true") //开启压背
+          .set("spark.streaming.kafka.maxRatePerPartition", "5000") //最大速度不超过5000条
+          .set("per.partition.offsetrange.step", "1000")
+          .set("per.partition.offsetrange.threshold", "1000")
+          .set("enable.auto.repartion", "false")
+        //    sc.getConf.set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+        //    sc.getConf.set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+
+      )
+    }
+    sparkInstance
+  }
+
+  def getKfkSccInstall(master: String, appName: String, brokers: String, groupId: String, checkpoinDir: String,
+                       consumerFrom: String, errorFrom: String, windowSizeSecend: Long) = {
+    if (sccInstance == null) {
+      val sc = SparkUtils.getScInstall(master, appName)
+      sc.setCheckpointDir("%s/sparkCheckPoint/%s".format(ConfigUtils.HDFS, checkpoinDir))
+      val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
+      sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
+    }
+    sccInstance
+  }
+
+
+  /**
+   * @func 提交offset。
+   * @auto jwp
+   * @date 2021/09/03
+   */
+  def CommitOffset(ssc: StreamingKafkaContext, ds: InputDStream[ConsumerRecord[String, String]], rdd: RDD[ConsumerRecord[String, String]]) = {
+    //使用自带的offset管理
+    val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+    //使用zookeeper来管理offset
+    ssc.updateRDDOffsets(ConfigUtils.GROUP_ID, rdd)
+    //    println(rdd.partitions.foreach("partition:%s".format(_)))
+    println("commited offset:" + offsetRanges)
+  }
+
+  /**
+   * @func 获取上次消费偏移量。
+   */
+  def getConsumerOffset(kp: Map[String, Object]) = {
+    val consumer = new KafkaConsumer[String, String](kp)
+    consumer.subscribe(Arrays.asList(ConfigUtils.TOPIC)); //订阅topic
+    consumer.poll(0)
+    val parts = consumer.assignment() //获取topic等信息
+    val re = parts.map { ps =>
+      ps -> consumer.position(ps)
+    }
+    consumer.pause(parts)
+    re
+  }
+
+
+  /**
+   * 初始化配置文件
+   */
+  def initJobConf(conf: KafkaConfig, brokers: String) {
+    var kp = Map[String, String](
+      "metadata.broker.list" -> brokers,
+      "serializer.class" -> "kafka.serializer.StringEncoder",
+      "group.id" -> ConfigUtils.GROUP_ID,
+      "kafka.last.consum" -> "last"
+    )
+    val topics = Set(ConfigUtils.TOPIC)
+    conf.setKafkaParams(kp)
+    conf.setTopics(topics)
+  }
+
+  /**
+   * @fun 保存rdd信息到指定的topic中
+   * @author jwp
+   * @date 2021-09-11
+   **/
+  def sinkDfToKfk(resultDf: DataFrame, topic: String) = {
+    resultDf
+      .write
+      .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错,写到kafka只能是append
+      .format("kafka")
+      .option("ignoreNullFields", "false")
+      .option("kafka.bootstrap.servers", ConfigUtils.BROKER_LIST)
+      .option("topic", topic)
+      .save()
+  }
+
+  /**
+   * @fun 设置访问hdfs的用户
+   * @author jwp
+   * @date 2021-09-11
+   */
+  def setHdfsUser(uname: String): Unit = {
+    System.setProperty("HADOOP_USER_NAME", uname)
+  }
+}
