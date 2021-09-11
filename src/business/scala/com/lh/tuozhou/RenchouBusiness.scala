@@ -1,6 +1,6 @@
 package com.lh.tuozhou
 
-import com.lh.utils.{ConfigUtils, PropertiesUtils, RdbmsUtils, Schemas, SparkUtils}
+import com.lh.utils.{ConfigUtils, RdbmsUtils, Schemas, SparkUtils}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.core.StreamingKafkaContext
@@ -143,10 +143,9 @@ object RenchouBusiness {
           //注意这里不用to_json不能嵌套使用，否则json格式会有反斜线
           val resultDf: DataFrame = sqlC.sql(joinSql)
             .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
-
           SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
-          resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
+          resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
       }
 
 
