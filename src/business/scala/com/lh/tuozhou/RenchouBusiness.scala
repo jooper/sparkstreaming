@@ -1,6 +1,6 @@
 package com.lh.tuozhou
 
-import com.lh.utils.{RdbmsUtils, Schemas, SparkUtils, KfkProperties}
+import com.lh.utils.{ConfigUtils, PropertiesUtils, RdbmsUtils, Schemas, SparkUtils}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.core.StreamingKafkaContext
@@ -30,7 +30,7 @@ object RenchouBusiness {
     try {
 
       val ssc: StreamingKafkaContext = SparkUtils.getKfkSccInstall("local[4]", "renchou",
-        KfkProperties.BROKER_LIST, KfkProperties.GROUP_ID, "renchou", "LAST",
+        ConfigUtils.BROKER_LIST, ConfigUtils.GROUP_ID, "renchou", "LAST",
         "consum", 10)
 
 
@@ -47,7 +47,7 @@ object RenchouBusiness {
       //      SparkUtils.getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
 
 
-      val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(KfkProperties.TOPIC))
+      val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(ConfigUtils.TOPIC))
 
 
       ds.mapPartitions(v => v.map(vv => vv.value())).foreachRDD {
@@ -144,7 +144,7 @@ object RenchouBusiness {
           val resultDf: DataFrame = sqlC.sql(joinSql)
             .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
 
-          SparkUtils.sinkDfToKfk(resultDf, KfkProperties.SINK_TOPIC)
+          SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
           resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
 
       }

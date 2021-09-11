@@ -68,7 +68,7 @@ object SparkUtils {
                        consumerFrom: String, errorFrom: String, windowSizeSecend: Long) = {
     if (sccInstance == null) {
       val sc = SparkUtils.getScInstall(master, appName)
-      sc.setCheckpointDir("%s/sparkCheckPoint/%s".format(KfkProperties.HDFS, checkpoinDir))
+      sc.setCheckpointDir("%s/sparkCheckPoint/%s".format(ConfigUtils.HDFS, checkpoinDir))
       val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
       sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
     }
@@ -86,7 +86,7 @@ object SparkUtils {
     val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
     ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
     //使用zookeeper来管理offset
-    ssc.updateRDDOffsets(KfkProperties.GROUP_ID, rdd)
+    ssc.updateRDDOffsets(ConfigUtils.GROUP_ID, rdd)
     //    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
   }
@@ -96,7 +96,7 @@ object SparkUtils {
    */
   def getConsumerOffset(kp: Map[String, Object]) = {
     val consumer = new KafkaConsumer[String, String](kp)
-    consumer.subscribe(Arrays.asList(KfkProperties.TOPIC)); //订阅topic
+    consumer.subscribe(Arrays.asList(ConfigUtils.TOPIC)); //订阅topic
     consumer.poll(0)
     val parts = consumer.assignment() //获取topic等信息
     val re = parts.map { ps =>
@@ -114,10 +114,10 @@ object SparkUtils {
     var kp = Map[String, String](
       "metadata.broker.list" -> brokers,
       "serializer.class" -> "kafka.serializer.StringEncoder",
-      "group.id" -> KfkProperties.GROUP_ID,
+      "group.id" -> ConfigUtils.GROUP_ID,
       "kafka.last.consum" -> "last"
     )
-    val topics = Set(KfkProperties.TOPIC)
+    val topics = Set(ConfigUtils.TOPIC)
     conf.setKafkaParams(kp)
     conf.setTopics(topics)
   }
@@ -133,7 +133,7 @@ object SparkUtils {
       .mode("append") //append 追加  overwrite覆盖   ignore忽略  error报错,写到kafka只能是append
       .format("kafka")
       .option("ignoreNullFields", "false")
-      .option("kafka.bootstrap.servers", KfkProperties.BROKER_LIST)
+      .option("kafka.bootstrap.servers", ConfigUtils.BROKER_LIST)
       .option("topic", topic)
       .save()
   }
