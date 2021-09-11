@@ -2,7 +2,7 @@ package com.lh.utils
 
 import java.util.Arrays
 
-import com.spark.test.KafkaProperties
+
 import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.core.{SparkKafkaContext, StreamingKafkaContext}
@@ -86,7 +86,7 @@ object SparkUtils {
     val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
     ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
     //使用zookeeper来管理offset
-    ssc.updateRDDOffsets(KafkaProperties.GROUP_ID, rdd)
+    ssc.updateRDDOffsets(KfkProperties.GROUP_ID, rdd)
     //    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
   }
@@ -96,7 +96,7 @@ object SparkUtils {
    */
   def getConsumerOffset(kp: Map[String, Object]) = {
     val consumer = new KafkaConsumer[String, String](kp)
-    consumer.subscribe(Arrays.asList(KafkaProperties.TOPIC)); //订阅topic
+    consumer.subscribe(Arrays.asList(KfkProperties.TOPIC)); //订阅topic
     consumer.poll(0)
     val parts = consumer.assignment() //获取topic等信息
     val re = parts.map { ps =>
@@ -114,10 +114,10 @@ object SparkUtils {
     var kp = Map[String, String](
       "metadata.broker.list" -> brokers,
       "serializer.class" -> "kafka.serializer.StringEncoder",
-      "group.id" -> KafkaProperties.GROUP_ID,
+      "group.id" -> KfkProperties.GROUP_ID,
       "kafka.last.consum" -> "last"
     )
-    val topics = Set(KafkaProperties.TOPIC)
+    val topics = Set(KfkProperties.TOPIC)
     conf.setKafkaParams(kp)
     conf.setTopics(topics)
   }

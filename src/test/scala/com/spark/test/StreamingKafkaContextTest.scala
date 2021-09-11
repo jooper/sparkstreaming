@@ -16,6 +16,7 @@ object StreamingKafkaContextTest {
   val brokers = KafkaProperties.BROKER_LIST
   PropertyConfigurator.configure("conf/log4j.properties")
 
+
   def main(args: Array[String]): Unit = {
     run
   }
