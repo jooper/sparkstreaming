@@ -114,7 +114,7 @@ object RenchouBusiness {
               |from bk
               |left join project pr on bk.ProjGuid=pr.p_projectId
               |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
-              |where type='INSERT' and table='s_booking' -- and bk.Status='激活'
+              |where type='INSERT' and table='s_booking' and bk.Status='激活'
               |""".stripMargin
 
           val businessDf: DataFrame = sqlC.sql(businesSql)
