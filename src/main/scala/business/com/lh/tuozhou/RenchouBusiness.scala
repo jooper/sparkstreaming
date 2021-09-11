@@ -13,6 +13,7 @@ object RenchouBusiness {
   SparkUtils.setHdfsUser("root")
   PropertyConfigurator.configure("conf/log4j.properties")
 
+
   def main(args: Array[String]): Unit = {
     run
   }
