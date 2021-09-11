@@ -105,7 +105,7 @@
     </dependencies>
 
     <build>
-        <sourceDirectory>src/core/scala</sourceDirectory>
+        <sourceDirectory>src/scala/core/scala</sourceDirectory>
         <testSourceDirectory>src/test/scala</testSourceDirectory>
         <plugins>
             <plugin>

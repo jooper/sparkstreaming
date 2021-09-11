@@ -188,7 +188,7 @@ object KfkJoinTidb {
         businessDf.groupBy("es", "type", "commpanyId", "bookingGuid", "projectGuid", "ProjNum"
           , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
           .agg(collect_set("customerId").as("customerId"))
-          .createOrReplaceTempView("business")
+          .createOrReplaceTempView("scala/business")
 
 
         val joinSql =
@@ -203,7 +203,7 @@ object KfkJoinTidb {
             |type  as umsActive,
             |struct(t.commpanyId,t.bookingGuid,t.projectGuid,t.ProjNum,t.projectName,t.isLevel25,t.level25Time,
             |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName,t.customerId) as data
-            |from business
+            |from scala.business
             |t""".format("booking", "认筹").stripMargin
 
         val resultDf: DataFrame = sqlC.sql(joinSql)
