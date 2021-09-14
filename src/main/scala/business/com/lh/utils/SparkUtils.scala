@@ -112,8 +112,7 @@ object SparkUtils {
    * @auto jwp
    * @date 2021/09/14
    */
-  def CommitRddOffset(ds: InputDStream[ConsumerRecord[String, String]], rdd: RDD[String]) = {
-    val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+  def CommitRddOffset(ds: InputDStream[ConsumerRecord[String, String]], offsetRanges: scala.Array[org.apache.spark.streaming.kafka010.OffsetRange]) = {
     ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
   }
 

@@ -59,6 +59,9 @@ object RenchouBusiness {
           broadcast.value.persist().createOrReplaceTempView("project")
           dimSbook2CstBst.value.persist().createOrReplaceTempView("sb2cst")
 
+          //offsetRanges只有直接对接kafka流的第一个rdd才能获取到相关offset信息，这里先存储信息，后续rdd经过转化后就无法获取相关信息
+          val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+
           val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
           val df = sqlC.read.schema(Schemas.renchouSchema).json(rdd)
           df.createOrReplaceTempView("booking")
@@ -149,20 +152,11 @@ object RenchouBusiness {
             .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
           val rst = SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
 
-
-          resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
-
-
-          //提交offset
-          SparkUtils.CommitRddOffset(ds, rdd)
+          //设置检查点，方便失败后数据恢复
+          resultDf.rdd.checkpoint()
+          //提交本批次到offset
+          SparkUtils.CommitRddOffset(ds, offsetRanges)
       }
-
-
-      //提交offset
-      //      ds.foreachRDD(rdd => {
-      //        SparkUtils.CommitOffset(ssc, ds, rdd)
-      //      })
-
 
       ssc.start()
       ssc.awaitTermination()
