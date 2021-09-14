@@ -105,8 +105,7 @@
     </dependencies>
 
     <build>
-        <sourceDirectory>src/scala/core/scala</sourceDirectory>
-        <testSourceDirectory>src/test/scala</testSourceDirectory>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

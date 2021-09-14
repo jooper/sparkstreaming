@@ -51,6 +51,8 @@ object RenchouBusiness {
       val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(ConfigUtils.TOPIC))
 
 
+      ds.count().print()
+
       ds.mapPartitions(v => v.map(vv => vv.value())).foreachRDD {
         rdd =>
           broadcast.value.persist().createOrReplaceTempView("project")
@@ -114,7 +116,7 @@ object RenchouBusiness {
               |from bk
               |left join project pr on bk.ProjGuid=pr.p_projectId
               |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
-              |where type='INSERT' and table='s_booking' and bk.Status='激活'
+              |where table='s_booking' and bk.Status='激活' -- and type='INSERT'
               |""".stripMargin
 
           val businessDf: DataFrame = sqlC.sql(businesSql)
