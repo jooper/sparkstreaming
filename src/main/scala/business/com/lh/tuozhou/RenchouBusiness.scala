@@ -7,6 +7,9 @@ import org.apache.spark.core.StreamingKafkaContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.streaming.dstream.InputDStream
+import org.apache.spark.common.util.KafkaConfig
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
 
 object RenchouBusiness {
 
@@ -30,8 +33,8 @@ object RenchouBusiness {
 
     try {
 
-      val ssc: StreamingKafkaContext = SparkUtils.getKfkSccInstall("local[4]", "renchou",
-        ConfigUtils.BROKER_LIST, ConfigUtils.GROUP_ID, "renchou", "LAST",
+      val ssc: StreamingKafkaContext = SparkUtils.getKfkSccInstall("local[10]", "renchou",
+        ConfigUtils.BROKER_LIST, ConfigUtils.GROUP_ID, "renchou", "EARLIEST",
         "consum", 10)
 
 
@@ -44,14 +47,12 @@ object RenchouBusiness {
       val dimSbook2CstBst = ssc.sc.broadcast(dimSbook2Cst)
 
 
-      //输出最后一次消费的offset
-      //      SparkUtils.getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
+      var cnf = ssc.streamingContext.sparkContext.getConf
+      cnf.set("max.partition.fetch.bytes", "1000")
 
 
       val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(ConfigUtils.TOPIC))
 
-
-      ds.count().print()
 
       ds.mapPartitions(v => v.map(vv => vv.value())).foreachRDD {
         rdd =>
@@ -116,12 +117,12 @@ object RenchouBusiness {
               |from bk
               |left join project pr on bk.ProjGuid=pr.p_projectId
               |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
-              |where table='s_booking' and bk.Status='激活' -- and type='INSERT'
+              |where table='s_booking' --and bk.Status='激活'  and type='INSERT'
               |""".stripMargin
 
           val businessDf: DataFrame = sqlC.sql(businesSql)
 
-
+          businessDf.show(5)
           businessDf.groupBy("es", "type", "commpanyId", "bookingGuid", "projectGuid", "ProjNum"
             , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
             .agg(collect_set("customerId").as("customerId"))
@@ -146,16 +147,21 @@ object RenchouBusiness {
           //注意这里不用to_json不能嵌套使用，否则json格式会有反斜线
           val resultDf: DataFrame = sqlC.sql(joinSql)
             .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
-          SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
+          val rst = SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
+
 
           resultDf.rdd.checkpoint() //设置检查点，方便失败后数据恢复
+
+
+          //提交offset
+          SparkUtils.CommitRddOffset(ds, rdd)
       }
 
 
       //提交offset
-      ds.foreachRDD(rdd => {
-        SparkUtils.CommitOffset(ssc, ds, rdd)
-      })
+      //      ds.foreachRDD(rdd => {
+      //        SparkUtils.CommitOffset(ssc, ds, rdd)
+      //      })
 
 
       ssc.start()

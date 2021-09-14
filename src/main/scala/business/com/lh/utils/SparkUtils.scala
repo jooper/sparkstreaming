@@ -48,16 +48,30 @@ object SparkUtils {
           .setAppName(appName)
           .set(SparkKafkaContext.MAX_RATE_PER_PARTITION, "1")
           .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-          .set("mergeSchema", "true")
           .set("spark.driver.host", "localhost")
-          .set("spark.streaming.backpressure.initialRate", "30") //初始速率500条/s
-          .set("spark.streaming.backpressure.enabled", "true") //开启压背
-          .set("spark.streaming.kafka.maxRatePerPartition", "5000") //最大速度不超过5000条
+          .set("spark.streaming.backpressure.enabled", "true") //开启反压
+          .set("spark.streaming.backpressure.pid.minRate", "1") //最小摄入条数控制
+          //控制每秒读取Kafka每个Partition最大消息数(500*3*10=15000)，若Streaming批次为10秒，topic最大分区为3，则每批次最大接收消息数为15000
+          // direct模式，限制每秒钟从topic的每个partition最多消费的消息条数
+          .set("spark.streaming.kafka.maxRatePerPartition", "1200")
+          //单位：毫秒，设置从Kafka拉取数据的超时时间，超时则抛出异常重新启动一个task，等待拿数据的时间
+          .set("spark.streaming.kafka.consumer.poll.ms", "1200000000")
+          //开启推测，防止某节点网络波动或数据倾斜导致处理时间拉长(推测会导致无数据处理的批次，也消耗与上一批次相同的执行时间，但不会超过批次最大时间，可能导致整体处理速度降低)
+          .set("spark.speculation", "true")
+
+
+          //是否开启自动重分区
+          //.set("enable.auto.repartion", "false")
+          //避免不必要的重分区操作，增加个阈值，只有该批次要消费的kafka的分区内数据大于该阈值才进行拆分
+          .set("per.partition.offsetrange.threshold", "300")
+          //拆分后，每个kafkardd 的分区数据量。
+          .set("per.partition.after.partition.size", "100")
+          .set("mergeSchema", "true")
+          .set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+          .set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
           .set("per.partition.offsetrange.step", "1000")
           .set("per.partition.offsetrange.threshold", "1000")
-          .set("enable.auto.repartion", "false")
-        //    sc.getConf.set("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-        //    sc.getConf.set("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+          .set("spark.streaming.backpressure.initialRate", "30") //初始速率500条/s  只适用于receive模式
 
       )
     }
@@ -70,6 +84,8 @@ object SparkUtils {
       val sc = SparkUtils.getScInstall(master, appName)
       sc.setCheckpointDir("%s/sparkCheckPoint/%s".format(ConfigUtils.HDFS, checkpoinDir))
       val kp = StreamingKafkaContext.getKafkaParam(brokers, groupId, consumerFrom, errorFrom)
+      //输出最后一次消费的offset
+      SparkUtils.getConsumerOffset(kp.toMap).foreach(item => println("上次消费的topic：%s，offset：%s".format(item._1, item._2)))
       sccInstance = new StreamingKafkaContext(kp.toMap, sc, Seconds(windowSizeSecend))
     }
     sccInstance
@@ -89,6 +105,16 @@ object SparkUtils {
     ssc.updateRDDOffsets(ConfigUtils.GROUP_ID, rdd)
     //    println(rdd.partitions.foreach("partition:%s".format(_)))
     println("commited offset:" + offsetRanges)
+  }
+
+  /**
+   * @func 提交offset。
+   * @auto jwp
+   * @date 2021/09/14
+   */
+  def CommitRddOffset(ds: InputDStream[ConsumerRecord[String, String]], rdd: RDD[String]) = {
+    val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
   }
 
   /**
