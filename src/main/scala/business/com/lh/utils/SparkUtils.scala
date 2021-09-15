@@ -112,8 +112,13 @@ object SparkUtils {
    * @auto jwp
    * @date 2021/09/14
    */
-  def CommitRddOffset(ds: InputDStream[ConsumerRecord[String, String]], offsetRanges: scala.Array[org.apache.spark.streaming.kafka010.OffsetRange]) = {
-    ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+  def CommitRddOffset(ds: InputDStream[ConsumerRecord[String, String]]) = {
+    ds.foreachRDD(rd => {
+      //offsetRanges只有直接对接kafka流的第一个rdd才能获取到相关offset信息，这里先存储信息，后续rdd经过转化后就无法获取相关信息
+      val offsetRanges = rd.asInstanceOf[HasOffsetRanges].offsetRanges
+      ds.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+    })
+
   }
 
   /**

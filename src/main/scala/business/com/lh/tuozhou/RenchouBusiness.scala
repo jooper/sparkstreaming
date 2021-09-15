@@ -9,7 +9,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.common.util.KafkaConfig
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges}
+import org.apache.spark.streaming.kafka010.{CanCommitOffsets, HasOffsetRanges, OffsetRange}
 
 object RenchouBusiness {
 
@@ -54,109 +54,113 @@ object RenchouBusiness {
       val ds: InputDStream[ConsumerRecord[String, String]] = ssc.createDirectStream[String, String](Set(ConfigUtils.TOPIC))
 
 
-      ds.mapPartitions(v => v.map(vv => vv.value())).foreachRDD {
-        rdd =>
-          broadcast.value.persist().createOrReplaceTempView("project")
-          dimSbook2CstBst.value.persist().createOrReplaceTempView("sb2cst")
-
-          //offsetRanges只有直接对接kafka流的第一个rdd才能获取到相关offset信息，这里先存储信息，后续rdd经过转化后就无法获取相关信息
-          val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
-
-          val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
-          val df = sqlC.read.schema(Schemas.renchouSchema).json(rdd)
-          df.createOrReplaceTempView("booking")
-          val sqlStr =
-            """
-              |select
-              |database,
-              |table,
-              |type,
-              |es,
-              |BookingGUID,
-              |ProjGuid,
-              |ProjNum,
-              |ProjName,
-              |nvl(x_IsTPFCustomer,'') x_IsTPFCustomer,
-              |nvl(x_TPFCustomerTime,'') x_TPFCustomerTime,
-              |nvl(x_IsThirdCustomer,'') x_IsThirdCustomer,
-              |nvl(x_ThirdCustomerTime,'') as x_ThirdCustomerTime,
-              |CreatedTime,
-              |Status
-              |from booking
-              |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
-              |lateral view explode(data.ProjName) exploded_names as ProjName
-              |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
-              |lateral view explode(data.Status) exploded_colors as Status
-              |lateral view explode(data.ProjNum) exploded_colors as ProjNum
-              |lateral view explode(data.x_IsTPFCustomer) exploded_colors as x_IsTPFCustomer
-              |lateral view explode(data.x_TPFCustomerTime) exploded_colors as x_TPFCustomerTime
-              |lateral view explode(data.x_IsThirdCustomer) exploded_colors as x_IsThirdCustomer
-              |lateral view explode(data.x_ThirdCustomerTime) exploded_colors as x_ThirdCustomerTime
-              |lateral view explode(data.CreatedTime) exploded_colors as CreatedTime
-              |""".stripMargin
-
-          sqlC.sql(sqlStr).createOrReplaceTempView("bk")
+      ds
+        .mapPartitions(v => v.map(vv => vv.value()))
+        .foreachRDD {
+          rdd =>
+            broadcast.value.persist().createOrReplaceTempView("project")
+            dimSbook2CstBst.value.persist().createOrReplaceTempView("sb2cst")
 
 
-          val businesSql =
-            """
-              |select
-              |type,
-              |es,
-              |nvl(pr.BUGUID,'') commpanyId,
-              |nvl(bk.BookingGUID,'')bookingGuid,
-              |nvl(bk.ProjGuid,'')projectGuid,
-              |nvl(bk.ProjNum,'')ProjNum,
-              |nvl(bk.ProjName,'') projectName,
-              |bk.x_IsTPFCustomer isLevel25,
-              |bk.x_TPFCustomerTime level25Time,
-              |bk.x_IsThirdCustomer isLevel30,
-              |bk.x_ThirdCustomerTime level30Time,
-              |bk.CreatedTime createdTime,
-              |nvl(bk.Status,'') status,
-              |nvl(pr.p_projectId,'') stagingId,
-              |nvl(pr.projName,'') projName,
-              |nvl(sb.OppCstGUID,'') customerId
-              |from bk
-              |left join project pr on bk.ProjGuid=pr.p_projectId
-              |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
-              |where table='s_booking' --and bk.Status='激活'  and type='INSERT'
-              |""".stripMargin
+            val sqlC = SparkUtils.getSQLContextInstance(rdd.sparkContext)
+            val df = sqlC.read.schema(Schemas.renchouSchema).json(rdd)
+            df.createOrReplaceTempView("booking")
+            val sqlStr =
+              """
+                |select
+                |database,
+                |table,
+                |type,
+                |es,
+                |BookingGUID,
+                |ProjGuid,
+                |ProjNum,
+                |ProjName,
+                |nvl(x_IsTPFCustomer,'') x_IsTPFCustomer,
+                |nvl(x_TPFCustomerTime,'') x_TPFCustomerTime,
+                |nvl(x_IsThirdCustomer,'') x_IsThirdCustomer,
+                |nvl(x_ThirdCustomerTime,'') as x_ThirdCustomerTime,
+                |CreatedTime,
+                |Status
+                |from booking
+                |lateral view explode(data.BookingGUID) exploded_names as BookingGUID
+                |lateral view explode(data.ProjName) exploded_names as ProjName
+                |lateral view explode(data.ProjGuid) exploded_colors as ProjGuid
+                |lateral view explode(data.Status) exploded_colors as Status
+                |lateral view explode(data.ProjNum) exploded_colors as ProjNum
+                |lateral view explode(data.x_IsTPFCustomer) exploded_colors as x_IsTPFCustomer
+                |lateral view explode(data.x_TPFCustomerTime) exploded_colors as x_TPFCustomerTime
+                |lateral view explode(data.x_IsThirdCustomer) exploded_colors as x_IsThirdCustomer
+                |lateral view explode(data.x_ThirdCustomerTime) exploded_colors as x_ThirdCustomerTime
+                |lateral view explode(data.CreatedTime) exploded_colors as CreatedTime
+                |""".stripMargin
 
-          val businessDf: DataFrame = sqlC.sql(businesSql)
-
-          businessDf.show(5)
-          businessDf.groupBy("es", "type", "commpanyId", "bookingGuid", "projectGuid", "ProjNum"
-            , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
-            .agg(collect_set("customerId").as("customerId"))
-            .createOrReplaceTempView("business")
+            sqlC.sql(sqlStr).createOrReplaceTempView("bk")
 
 
-          val joinSql =
-            """
-              |select
-              |'%s' as subject,
-              |'%s' as msg ,
-              |t.es as eventTime,
-              |t.type as actionType,
-              |'' as umsId,
-              |es as umsTime,
-              |type  as umsActive,
-              |struct(t.commpanyId,t.bookingGuid,t.projectGuid,t.ProjNum,t.projectName,t.isLevel25,t.level25Time,
-              |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName,t.customerId) as data
-              |from business
-              |t""".format("booking", "认筹").stripMargin
+            val businesSql =
+              """
+                |select
+                |type,
+                |es,
+                |nvl(pr.BUGUID,'') commpanyId,
+                |nvl(bk.BookingGUID,'')bookingGuid,
+                |nvl(bk.ProjGuid,'')projectGuid,
+                |nvl(bk.ProjNum,'')ProjNum,
+                |nvl(bk.ProjName,'') projectName,
+                |bk.x_IsTPFCustomer isLevel25,
+                |bk.x_TPFCustomerTime level25Time,
+                |bk.x_IsThirdCustomer isLevel30,
+                |bk.x_ThirdCustomerTime level30Time,
+                |bk.CreatedTime createdTime,
+                |nvl(bk.Status,'') status,
+                |nvl(pr.p_projectId,'') stagingId,
+                |nvl(pr.projName,'') projName,
+                |nvl(sb.OppCstGUID,'') customerId
+                |from bk
+                |left join project pr on bk.ProjGuid=pr.p_projectId
+                |left join sb2cst sb  on sb.BookingGUID=bk.BookingGUID
+                |where table='s_booking' --and bk.Status='激活'  and type='INSERT'
+                |""".stripMargin
 
-          //注意这里不用to_json不能嵌套使用，否则json格式会有反斜线
-          val resultDf: DataFrame = sqlC.sql(joinSql)
-            .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
-          val rst = SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
+            val businessDf: DataFrame = sqlC.sql(businesSql)
 
-          //设置检查点，方便失败后数据恢复
-          resultDf.rdd.checkpoint()
-          //提交本批次到offset
-          SparkUtils.CommitRddOffset(ds, offsetRanges)
-      }
+            businessDf.show(5)
+            businessDf.groupBy("es", "type", "commpanyId", "bookingGuid", "projectGuid", "ProjNum"
+              , "projectName", "isLevel25", "level25Time", "isLevel30", "level30Time", "createdTime", "status", "stagingId", "projName")
+              .agg(collect_set("customerId").as("customerId"))
+              .createOrReplaceTempView("business")
+
+
+            val joinSql =
+              """
+                |select
+                |'%s' as subject,
+                |'%s' as msg ,
+                |t.es as eventTime,
+                |t.type as actionType,
+                |'' as umsId,
+                |es as umsTime,
+                |type  as umsActive,
+                |struct(t.commpanyId,t.bookingGuid,t.projectGuid,t.ProjNum,t.projectName,t.isLevel25,t.level25Time,
+                |t.isLevel30,t.level30Time,t.createdTime,t.status,t.stagingId,t.projName,t.customerId) as data
+                |from business
+                |t""".format("booking", "认筹").stripMargin
+
+            //注意这里不用to_json不能嵌套使用，否则json格式会有反斜线
+            val resultDf: DataFrame = sqlC.sql(joinSql)
+              .selectExpr("cast(data.bookingGuid as String) AS key", "to_json(struct(*)) AS value")
+            val rst = SparkUtils.sinkDfToKfk(resultDf, ConfigUtils.SINK_TOPIC)
+
+            //设置检查点，方便失败后数据恢复
+            resultDf.rdd.checkpoint()
+            //提交本批次到offset
+            SparkUtils.CommitRddOffset(ds)
+        }
+
+      ds.foreachRDD(rdd => {
+        SparkUtils.CommitOffset(ssc, ds, rdd)
+      })
 
       ssc.start()
       ssc.awaitTermination()
